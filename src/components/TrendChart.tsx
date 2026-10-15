@@ -1,0 +1,69 @@
+"use client";
+
+import { Area, Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { usePrefs } from "@/lib/prefs";
+import type { MonthRow } from "@/lib/types";
+
+const money = (v: number) => (v >= 1000 ? `$${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `$${v}`);
+
+function palette(theme: "dark" | "light") {
+  return theme === "dark"
+    ? { grid: "rgba(255,255,255,0.06)", tick: "#6F7E93", spend: "#5E7090", line: "#EEF2F7", panel: "#172840", border: "rgba(255,255,255,0.1)", text: "#EEF2F7" }
+    : { grid: "#E6E9EE", tick: "#7C899B", spend: "#A8B4C5", line: "#0F1B2D", panel: "#FFFFFF", border: "#E0E4EA", text: "#0F1B2D" };
+}
+
+/** Revenue from ads (area) against ad spend (bars), with leads as a line on the right axis. */
+export function TrendChart({ data, leadLabel = "Leads" }: { data: MonthRow[]; leadLabel?: string }) {
+  const { theme } = usePrefs();
+  const c = palette(theme);
+  return (
+    <div className="h-full w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 10, right: 4, left: -6, bottom: 0 }}>
+          <defs>
+            <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#FF5A36" stopOpacity={0.45} />
+              <stop offset="100%" stopColor="#FF5A36" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid vertical={false} stroke={c.grid} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: c.tick, fontSize: 12 }} />
+          <YAxis yAxisId="money" tickFormatter={money} tickLine={false} axisLine={false} tick={{ fill: c.tick, fontSize: 12 }} width={56} />
+          <YAxis yAxisId="count" orientation="right" tickLine={false} axisLine={false} tick={{ fill: c.tick, fontSize: 12 }} width={34} allowDecimals={false} />
+          <Tooltip
+            cursor={{ fill: theme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,27,45,0.04)" }}
+            contentStyle={{ borderRadius: 14, border: `1px solid ${c.border}`, background: c.panel, color: c.text, fontSize: 13 }}
+            labelStyle={{ color: c.text, fontWeight: 700 }}
+            formatter={(value, name) => {
+              const v = Number(value);
+              return [name === leadLabel ? v.toLocaleString() : `$${v.toLocaleString()}`, name];
+            }}
+          />
+          <Bar yAxisId="money" dataKey="spend" name="Ad spend" fill={c.spend} radius={[6, 6, 0, 0]} maxBarSize={18} />
+          <Area yAxisId="money" dataKey="revenue" name="Revenue from ads" type="monotone" stroke="#FF5A36" strokeWidth={2.5} fill="url(#revFill)" />
+          <Line yAxisId="count" dataKey="leads" name={leadLabel} stroke={c.line} strokeWidth={2} strokeDasharray="5 4" dot={false} type="monotone" />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** Tiny revenue trend for the hero panel. */
+export function Sparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const w = 220, h = 64, max = Math.max(...values, 1);
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * w, h - 4 - (v / max) * (h - 8)]);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FF5A36" stopOpacity={0.35} />
+          <stop offset="100%" stopColor="#FF5A36" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={`${line} L${w},${h} L0,${h} Z`} fill="url(#sparkFill)" />
+      <path d={line} fill="none" stroke="#FF5A36" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}

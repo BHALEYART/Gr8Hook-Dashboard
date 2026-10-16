@@ -109,11 +109,25 @@ body {
 @media (min-width: 1100px) {
   :root[data-layout="focus"] .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   :root[data-layout="focus"] .trend-chart { height: auto; min-height: 380px; }
-  :root[data-layout="focus"] .funnel-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 
 .trend-chart { height: 320px; }
 .funnel-row { height: 100%; align-items: center; }
+@media (min-width: 768px) { .funnel-row { grid-template-columns: repeat(var(--steps, 5), minmax(0, 1fr)); } }
+
+/* Charts are clickable; keep the focus ring for keyboard users only */
+.recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
+.recharts-wrapper:focus-visible { outline: 2px solid #FF5A36; outline-offset: 4px; border-radius: 8px; }
+
+/* Month scrubber */
+.scrub { accent-color: #FF5A36; height: 28px; cursor: pointer; }
+.scrub-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: none;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); font-size: 18px; line-height: 1;
+}
+.scrub-btn:hover:not(:disabled) { border-color: var(--ink-3); }
+.scrub-btn:disabled { opacity: .4; cursor: default; }
+:where(button, a, input, select):focus-visible { outline: 2px solid #FF5A36; outline-offset: 2px; }
 
 .hero-glow { background: radial-gradient(120% 140% at 100% 0%, var(--glow), transparent 55%), var(--panel); }
 

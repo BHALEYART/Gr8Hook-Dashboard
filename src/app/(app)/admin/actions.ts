@@ -28,6 +28,8 @@ export async function createClientAction(formData: FormData) {
     .insert({
       name,
       primary_goal: str(formData, "primary_goal") ?? "leads",
+      lead_label: str(formData, "lead_label"),
+      show_reach: formData.get("show_reach") === "on",
       google_ads_customer_id: str(formData, "google_ads_customer_id"),
       meta_ad_account_id: str(formData, "meta_ad_account_id"),
       ghl_location_id: str(formData, "ghl_location_id"),
@@ -59,6 +61,8 @@ export async function updateClientAction(formData: FormData) {
     .update({
       name: str(formData, "name"),
       primary_goal: str(formData, "primary_goal") ?? "leads",
+      lead_label: str(formData, "lead_label"),
+      show_reach: formData.get("show_reach") === "on",
       google_ads_customer_id: str(formData, "google_ads_customer_id"),
       meta_ad_account_id: str(formData, "meta_ad_account_id"),
       ghl_location_id: str(formData, "ghl_location_id"),

@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { isDemo } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 import { DEMO_CLIENTS, DEMO_SERVICES, demoBundle } from "@/lib/demo-data";
-import { campaignRows, kpis, lastMonths, monthKey, rollupMonthly, type DashboardInput } from "@/lib/metrics";
-import type { Annotation, CampaignMapping, Client, ClientService, Lead, Viewer } from "@/lib/types";
+import { campaignRows, lastMonths, monthKey, rollupMonthly, type DashboardInput } from "@/lib/metrics";
+import type { Annotation, CampaignMapping, CampaignRow, Client, ClientService, Lead, Viewer } from "@/lib/types";
 
 export async function getViewer(): Promise<Viewer> {
   if (isDemo) return { userId: "demo", email: "demo@gr8hook.com", isAdmin: true, clientIds: DEMO_CLIENTS.map((c) => c.id) };
@@ -85,40 +85,32 @@ async function loadInput(clientId: string, since: string): Promise<DashboardInpu
   };
 }
 
+/**
+ * Monthly building blocks for the Overview. The page sums whichever months are in view
+ * (the whole period, one scrubbed month, or two compared months) on the client.
+ */
 export async function getDashboard(clientId: string, monthsBack: number) {
-  // Load twice the window so the previous period is available for % change.
+  // Load twice the window so the previous period is available for comparison.
   const all = lastMonths(monthsBack * 2);
   const current = all.slice(monthsBack);
   const previous = all.slice(0, monthsBack);
   const input = await loadInput(clientId, `${all[0]}-01`);
-  const monthsNow = rollupMonthly(input, current);
-  const monthsPrev = rollupMonthly(input, previous);
-  const currentSet = new Set(current);
-  const leadsNow = input.leads.filter((l) => currentSet.has(monthKey(l.created_at)));
-  const unattributed = leadsNow.filter((l) => !l.campaign_id).length;
-  const k = kpis(monthsNow, monthsPrev, unattributed);
-
-  // Funnel: ad clicks → leads → appointments → sales, for ad-driven contacts in the window.
-  const paidContacts = new Set(leadsNow.filter((l) => l.campaign_id).map((l) => l.ghl_contact_id));
-  const clicks = input.metrics.filter((m) => currentSet.has(monthKey(m.date))).reduce((s, m) => s + m.clicks, 0);
-  const sales = input.opportunities.filter((o) => o.status === "won" && paidContacts.has(o.contact_id)).length;
-  const platformOf = new Map(input.metrics.map((m) => [m.campaign_id, m.platform]));
-  const bySource = { google: 0, meta: 0, unattributed };
-  for (const l of leadsNow) {
-    if (!l.campaign_id) continue;
-    const p = platformOf.get(l.campaign_id);
-    if (p === "google") bySource.google++;
-    else if (p === "meta") bySource.meta++;
-  }
-
+  const campaignsByMonth: Record<string, CampaignRow[]> = {};
+  for (const m of all) campaignsByMonth[m] = campaignRows(input, [m]);
   return {
-    months: monthsNow,
-    kpis: k,
-    funnel: { spend: k.spend, clicks, leads: k.leads, appointments: k.appointments, sales },
-    bySource,
-    campaigns: campaignRows(input, current),
-    annotations: input.annotations.filter((a) => currentSet.has(monthKey(a.date))),
+    rows: rollupMonthly(input, all),
+    current,
+    previous,
+    campaignsByMonth,
+    annotations: input.annotations.filter((a) => all.includes(monthKey(a.date))),
   };
+}
+
+/** Campaign totals for the last `monthsBack` months. */
+export async function getCampaigns(clientId: string, monthsBack: number) {
+  const months = lastMonths(monthsBack);
+  const input = await loadInput(clientId, `${months[0]}-01`);
+  return campaignRows(input, months);
 }
 
 export async function getRecentLeads(clientId: string, limit = 50) {

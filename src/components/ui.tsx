@@ -15,7 +15,7 @@ export function PageHeader({ eyebrow, title, children }: { eyebrow?: string; tit
 }
 
 /** Change badge. `goodWhenUp=false` for costs, where a drop is good. */
-export function Delta({ now, before, goodWhenUp = true, neutral = false }: { now: number; before: number; goodWhenUp?: boolean; neutral?: boolean }) {
+export function Delta({ now, before, goodWhenUp = true, neutral = false, vs = "prior period" }: { now: number; before: number; goodWhenUp?: boolean; neutral?: boolean; vs?: string }) {
   const pct = pctChange(now, before);
   if (pct === null || !isFinite(pct)) return <span className="text-xs text-ink-3">No prior data</span>;
   const up = pct >= 0;
@@ -24,7 +24,7 @@ export function Delta({ now, before, goodWhenUp = true, neutral = false }: { now
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-semibold ${color}`}>
       <span aria-hidden="true">{up ? "▲" : "▼"}</span>
-      {Math.abs(pct).toFixed(0)}% <span className="font-normal text-ink-3">vs. prior period</span>
+      {Math.abs(pct).toFixed(0)}% <span className="font-normal text-ink-3">vs. {vs}</span>
     </span>
   );
 }

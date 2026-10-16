@@ -10,6 +10,7 @@ interface InsightRow {
   spend?: string;
   impressions?: string;
   clicks?: string;
+  reach?: string;
   actions?: { action_type: string; value: string }[];
   action_values?: { action_type: string; value: string }[];
 }
@@ -26,7 +27,7 @@ export async function fetchMetaDaily(clientId: string, adAccountId: string, sinc
   const params = new URLSearchParams({
     level: "campaign",
     time_increment: "1",
-    fields: "campaign_id,campaign_name,spend,impressions,clicks,actions,action_values",
+    fields: "campaign_id,campaign_name,spend,impressions,clicks,reach,actions,action_values",
     time_range: JSON.stringify({ since, until }),
     limit: "500",
     access_token: token,
@@ -40,6 +41,7 @@ export async function fetchMetaDaily(clientId: string, adAccountId: string, sinc
     const body = (await res.json()) as { data: InsightRow[]; paging?: { next?: string } };
     for (const r of body.data) {
       const conv = (r.actions ?? []).filter((a) => CONVERSION_ACTIONS.has(a.action_type)).reduce((s, a) => s + Number(a.value), 0);
+      const action = (type: string) => Number((r.actions ?? []).find((a) => a.action_type === type)?.value ?? 0);
       const value = (r.action_values ?? []).filter((a) => CONVERSION_ACTIONS.has(a.action_type)).reduce((s, a) => s + Number(a.value), 0);
       out.push({
         client_id: clientId,
@@ -52,6 +54,11 @@ export async function fetchMetaDaily(clientId: string, adAccountId: string, sinc
         clicks: Number(r.clicks ?? 0),
         conversions: conv,
         conversion_value: value,
+        // Daily reach is people reached that day; summing days slightly overcounts repeat viewers.
+        reach: Number(r.reach ?? 0),
+        engagements: action("post_engagement"),
+        video_views: action("video_view"),
+        landing_page_views: action("landing_page_view"),
       });
     }
     url = body.paging?.next ?? null;

@@ -34,21 +34,37 @@ function wonByContact(opportunities: Opportunity[]) {
   return map;
 }
 
+/** One row per month: ad delivery, attention, and the CRM results tied back to ads. */
 export function rollupMonthly(input: DashboardInput, months: string[]): MonthRow[] {
-  const rows = new Map<string, MonthRow>(
-    months.map((m) => [m, { month: m, label: MONTH_LABELS[Number(m.slice(5)) - 1], spend: 0, leads: 0, appointments: 0, revenue: 0 }]),
-  );
+  const blank = (m: string): MonthRow => ({
+    month: m, label: MONTH_LABELS[Number(m.slice(5)) - 1], spend: 0, clicks: 0, impressions: 0, reach: 0, engagements: 0,
+    video_views: 0, landing_page_views: 0, leads: 0, appointments: 0, sales: 0, revenue: 0, google_leads: 0, meta_leads: 0, unattributed: 0,
+  });
+  const rows = new Map<string, MonthRow>(months.map((m) => [m, blank(m)]));
+  const platformOf = new Map<string, string>();
   for (const r of input.metrics) {
+    platformOf.set(r.campaign_id, r.platform);
     const row = rows.get(monthKey(r.date));
-    if (row) row.spend += r.spend;
+    if (!row) continue;
+    row.spend += r.spend;
+    row.clicks += r.clicks;
+    row.impressions += r.impressions;
+    row.reach += r.reach ?? 0;
+    row.engagements += r.engagements ?? 0;
+    row.video_views += r.video_views ?? 0;
+    row.landing_page_views += r.landing_page_views ?? 0;
   }
   const won = wonByContact(input.opportunities);
   for (const l of input.leads) {
-    if (!l.campaign_id) continue; // only paid, attributed leads
     const row = rows.get(monthKey(l.created_at));
     if (!row) continue;
+    if (!l.campaign_id) { row.unattributed += 1; continue; } // only paid, attributed leads count below
     row.leads += 1;
-    row.revenue += won.get(l.ghl_contact_id) ?? 0;
+    const p = platformOf.get(l.campaign_id);
+    if (p === "google") row.google_leads += 1;
+    else if (p === "meta") row.meta_leads += 1;
+    const value = won.get(l.ghl_contact_id);
+    if (value !== undefined) { row.sales += 1; row.revenue += value; }
   }
   const paidContacts = new Set(input.leads.filter((l) => l.campaign_id).map((l) => l.ghl_contact_id));
   for (const a of input.appointments) {
@@ -72,10 +88,15 @@ export function campaignRows(input: DashboardInput, months: string[]): CampaignR
     if (!inRange.has(monthKey(r.date))) continue;
     const row = byId.get(r.campaign_id) ?? {
       platform: r.platform, campaign_id: r.campaign_id, campaign_name: r.campaign_name,
-      spend: 0, clicks: 0, leads: 0, revenue: 0, service: mapping.get(r.campaign_id) ?? null,
+      spend: 0, clicks: 0, impressions: 0, reach: 0, engagements: 0, landing_page_views: 0, leads: 0, revenue: 0,
+      service: mapping.get(r.campaign_id) ?? null,
     };
     row.spend += r.spend;
     row.clicks += r.clicks;
+    row.impressions += r.impressions;
+    row.reach += r.reach ?? 0;
+    row.engagements += r.engagements ?? 0;
+    row.landing_page_views += r.landing_page_views ?? 0;
     byId.set(r.campaign_id, row);
   }
   const won = wonByContact(input.opportunities);
@@ -89,39 +110,6 @@ export function campaignRows(input: DashboardInput, months: string[]): CampaignR
   return [...byId.values()]
     .map((r) => ({ ...r, spend: Math.round(r.spend), revenue: Math.round(r.revenue) }))
     .sort((a, b) => b.spend - a.spend);
-}
-
-export interface Kpis {
-  spend: number;
-  leads: number;
-  costPerLead: number | null;
-  appointments: number;
-  costPerAppointment: number | null;
-  revenue: number;
-  roas: number | null;
-  unattributedLeads: number;
-  /** Same values for the previous period of equal length, for % change. */
-  prev: { spend: number; leads: number; appointments: number; revenue: number };
-}
-
-export function kpis(current: MonthRow[], previous: MonthRow[], unattributedLeads: number): Kpis {
-  const sum = (rows: MonthRow[], k: keyof Omit<MonthRow, "month" | "label">) => rows.reduce((s, r) => s + r[k], 0);
-  const spend = sum(current, "spend");
-  const leads = sum(current, "leads");
-  const appointments = sum(current, "appointments");
-  const revenue = sum(current, "revenue");
-  return {
-    spend, leads, appointments, revenue, unattributedLeads,
-    costPerLead: leads ? spend / leads : null,
-    costPerAppointment: appointments ? spend / appointments : null,
-    roas: spend ? revenue / spend : null,
-    prev: {
-      spend: sum(previous, "spend"),
-      leads: sum(previous, "leads"),
-      appointments: sum(previous, "appointments"),
-      revenue: sum(previous, "revenue"),
-    },
-  };
 }
 
 export function pctChange(now: number, before: number): number | null {

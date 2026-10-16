@@ -15,6 +15,10 @@ export interface Client {
   meta_ad_account_id: string | null;
   ghl_location_id: string | null;
   ghl_calendar_ids?: string[];
+  /** Offer the Reach view (impressions, reach, engagement) on the Overview. */
+  show_reach?: boolean;
+  /** What this client calls a lead, e.g. "Consults" or "Signups". Defaults to "Leads". */
+  lead_label?: string | null;
   created_at: string;
 }
 
@@ -35,6 +39,11 @@ export interface AdMetricDaily {
   clicks: number;
   conversions: number;
   conversion_value: number;
+  // Attention metrics (optional; Meta fills these, Google search campaigns usually don't)
+  reach?: number;
+  engagements?: number;
+  video_views?: number;
+  landing_page_views?: number;
 }
 
 export interface Lead {
@@ -92,11 +101,21 @@ export interface Viewer {
 
 export interface MonthRow {
   month: string; // YYYY-MM
-  label: string; // "Jan"
+  label: string; // "Jan" or "Jan (MTD)"
   spend: number;
-  leads: number;
+  clicks: number;
+  impressions: number;
+  reach: number;
+  engagements: number;
+  video_views: number;
+  landing_page_views: number;
+  leads: number; // paid, attributed leads
   appointments: number;
+  sales: number;
   revenue: number;
+  google_leads: number;
+  meta_leads: number;
+  unattributed: number;
 }
 
 export interface CampaignRow {
@@ -105,6 +124,10 @@ export interface CampaignRow {
   campaign_name: string;
   spend: number;
   clicks: number;
+  impressions: number;
+  reach: number;
+  engagements: number;
+  landing_page_views: number;
   leads: number;
   revenue: number;
   service: string | null;

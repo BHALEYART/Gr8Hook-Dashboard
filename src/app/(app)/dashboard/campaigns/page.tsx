@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Empty, PageHeader, PlatformBadge, RangeTabs, parseMonths } from "@/components/ui";
-import { getDashboard, getViewer, resolveClient } from "@/lib/data";
+import { getCampaigns, getViewer, resolveClient } from "@/lib/data";
 import { money, num } from "@/lib/metrics";
 
 export const metadata: Metadata = { title: "Campaigns" };
@@ -11,7 +11,7 @@ export default async function CampaignsPage({ searchParams }: PageProps<"/dashbo
   const client = await resolveClient(viewer, typeof sp.client === "string" ? sp.client : undefined);
   if (!client) return <Empty title="No client yet" />;
   const months = parseMonths(sp.months);
-  const { campaigns } = await getDashboard(client.id, months);
+  const campaigns = await getCampaigns(client.id, months);
 
   return (
     <>

@@ -24,6 +24,7 @@ npm run dev
 | Leads & sales feed (source, campaign, appointment, sale) | `src/app/(app)/dashboard/leads` | Working |
 | Admin: client list, add client, client settings, campaign pairing, chart notes, invites, deactivate | `src/app/(app)/admin` | Working against Supabase |
 | Database schema + row-level security + encrypted token storage | `supabase/migrations/0001_init.sql` | Ready to run |
+| Reach metrics + per-client lead label / Reach view | `supabase/migrations/0002_reach_and_labels.sql` | Ready to run |
 | Google Ads, Meta, GoHighLevel API clients | `src/lib/integrations/*` | Written, needs API access + live testing |
 | Nightly sync (last 7 days, or 400-day backfill) | `src/lib/sync.ts`, `src/app/api/cron/sync` | Written, needs API access |
 | GHL webhook (real-time contact updates) | `src/app/api/webhooks/ghl` | Contacts done; opportunities/appointments TODO |
@@ -34,7 +35,7 @@ Every data table has a `client_id`. Postgres Row Level Security only returns row
 
 ## Go live
 
-1. **Supabase:** create a project, then run `supabase/migrations/0001_init.sql` in the SQL editor.
+1. **Supabase:** create a project, then run `supabase/migrations/0001_init.sql` and `0002_reach_and_labels.sql` (in that order) in the SQL editor.
 2. **Make yourself admin:** sign up once through the app (or add your user under Authentication), then run
    `update public.profiles set is_admin = true where email = 'you@example.com';`
 3. **Auth settings:** in Supabase → Authentication → URL configuration, set the Site URL to your app URL and add `https://YOUR-APP/auth/callback` as a redirect URL. Turn off public sign-ups (invite-only).

@@ -26,6 +26,17 @@ export function ClientFields({ client, services }: { client?: Client; services?:
             <option value="appointments">Appointments / bookings</option>
           </select>
         </div>
+        <div className="field">
+          <label className="label" htmlFor="lead_label">What they call a lead (optional)</label>
+          <input className="input" id="lead_label" name="lead_label" placeholder="e.g. Consult requests, Email signups" defaultValue={client?.lead_label ?? ""} />
+        </div>
+        <label className="flex min-h-14 cursor-pointer items-center gap-3 self-end rounded-xl border border-line px-4 py-3 hover:border-ink-3">
+          <input type="checkbox" name="show_reach" defaultChecked={client?.show_reach ?? false} className="h-5 w-5 accent-[#FF5A36]" />
+          <span>
+            <span className="block text-sm font-semibold">Show Reach view</span>
+            <span className="block text-xs text-ink-3">Impressions, reach and engagement, for awareness-driven clients</span>
+          </span>
+        </label>
       </fieldset>
 
       <fieldset>

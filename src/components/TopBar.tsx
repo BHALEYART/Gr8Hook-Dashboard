@@ -82,7 +82,7 @@ export function TopBar({ email, isAdmin, clients, isDemo }: Props) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
-        <Link href={keep("/dashboard")} aria-label="Dashboard home"><Logo /></Link>
+        <a href="https://gr8hook.com" aria-label="Gr8 Hook website" className="rounded-lg"><Logo /></a>
 
         <nav aria-label="Dashboard" className="ml-4 hidden h-16 items-stretch md:flex">
           {TABS.map((t) => tab(keep(t.href), t.label, pathname === t.href))}

@@ -24,7 +24,7 @@ async function LoginContent({ searchParams }: { searchParams: PageProps<"/login"
     <main className="flex min-h-screen items-center justify-center bg-navy px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 flex justify-center">
-          <Logo dark />
+          <a href="https://gr8hook.com" aria-label="Gr8 Hook website"><Logo dark /></a>
         </div>
         <div className="rounded-[20px] border border-white/10 bg-panel p-8 shadow-2xl">
           <p className="eyebrow">Client dashboard</p>

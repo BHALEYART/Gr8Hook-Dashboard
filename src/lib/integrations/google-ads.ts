@@ -1,5 +1,6 @@
 // Google Ads API — daily campaign metrics for one customer account under your MCC.
-// Requires an approved developer token (apply from your MCC: Tools → API Center).
+// Access is tied to the Google Cloud project behind your OAuth client (Explorer / Basic / Standard),
+// set up on the Google Ads API Overview page in Cloud Console. Developer tokens are now optional.
 // Before going live, confirm the current API version at https://developers.google.com/google-ads/api/docs/release-notes
 import type { AdMetricDaily } from "@/lib/types";
 
@@ -44,7 +45,7 @@ export async function fetchGoogleAdsDaily(clientId: string, customerId: string, 
     method: "POST",
     headers: {
       Authorization: `Bearer ${await accessToken()}`,
-      "developer-token": env("GOOGLE_ADS_DEVELOPER_TOKEN"),
+      ...(process.env.GOOGLE_ADS_DEVELOPER_TOKEN ? { "developer-token": process.env.GOOGLE_ADS_DEVELOPER_TOKEN } : {}),
       "login-customer-id": env("GOOGLE_ADS_LOGIN_CUSTOMER_ID").replace(/-/g, ""), // your MCC ID
       "Content-Type": "application/json",
     },

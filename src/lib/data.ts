@@ -172,6 +172,40 @@ export async function getRecentLeads(clientId: string, limit = 50) {
     }));
 }
 
+/** E-commerce "Orders & sales": the most recent Shopify orders with the ad (if any) each was tied to. */
+export async function getRecentOrders(clientId: string, limit = 50) {
+  let orders: StoreOrder[], lines: StoreOrderLine[], names = new Map<string, string>();
+  if (isDemo) {
+    const st = demoStore(clientId);
+    orders = [...st.orders].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+    const ids = new Set(orders.map((o) => o.order_id));
+    lines = st.lines.filter((l) => ids.has(l.order_id));
+    for (const m of st.metrics) names.set(m.campaign_id, m.campaign_name);
+  } else {
+    const supabase = await createClient();
+    const { data } = await supabase.from("shopify_orders").select("*, shopify_order_lines(*)").eq("client_id", clientId)
+      .order("created_at", { ascending: false }).limit(limit);
+    const rows = (data ?? []) as (StoreOrder & { shopify_order_lines: StoreOrderLine[] })[];
+    orders = rows.map((r) => ({ ...r, total: Number(r.total) }));
+    lines = rows.flatMap((r) => r.shopify_order_lines.map((l) => ({ ...l, amount: Number(l.amount) })));
+    const ids = [...new Set(orders.map((o) => o.campaign_id).filter(Boolean))] as string[];
+    if (ids.length) {
+      const { data: camps } = await supabase.from("ad_metrics_daily").select("campaign_id, campaign_name").eq("client_id", clientId).in("campaign_id", ids).limit(1000);
+      names = new Map((camps ?? []).map((c) => [c.campaign_id as string, c.campaign_name as string]));
+    }
+  }
+  const byOrder = new Map<string, StoreOrderLine[]>();
+  for (const l of lines) byOrder.set(l.order_id, [...(byOrder.get(l.order_id) ?? []), l]);
+  const host = (u: string | null) => { try { return u ? new URL(u).hostname.replace(/^www\./, "") : null; } catch { return null; } };
+  return orders.map((o) => ({
+    ...o,
+    campaign_name: o.campaign_id ? names.get(o.campaign_id) ?? o.campaign_id : null,
+    items: (byOrder.get(o.order_id) ?? []).map((l) => (l.quantity > 1 ? `${l.product_title} ×${l.quantity}` : l.product_title)).join(", "),
+    // Where the visit came from when it wasn't an ad: UTM source/medium, else the referring site, else direct.
+    source: o.utm_source ? `${o.utm_source}${o.utm_medium ? ` / ${o.utm_medium}` : ""}` : host(o.referrer) ?? "Direct / unknown",
+  }));
+}
+
 export async function getMappings(clientId: string) {
   const since = `${lastMonths(3)[0]}-01`;
   const input = await loadInput(clientId, since);

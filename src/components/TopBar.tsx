@@ -10,7 +10,7 @@ import { usePrefs } from "@/lib/prefs";
 interface Props {
   email: string;
   isAdmin: boolean;
-  clients: { id: string; name: string }[];
+  clients: { id: string; name: string; primary_goal?: string }[];
   isDemo: boolean;
 }
 
@@ -45,6 +45,8 @@ export function TopBar({ email, isAdmin, clients, isDemo }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const clientId = params.get("client") ?? clients[0]?.id ?? "";
+  const isStore = clients.find((c) => c.id === clientId)?.primary_goal === "ecommerce";
+  const tabs = TABS.map((t) => (isStore && t.href === "/dashboard/leads" ? { ...t, label: "Orders & Sales" } : t));
   const keep = (href: string) => {
     const q = new URLSearchParams();
     if (clientId) q.set("client", clientId);
@@ -85,7 +87,7 @@ export function TopBar({ email, isAdmin, clients, isDemo }: Props) {
         <a href="https://gr8hook.com" aria-label="Gr8 Hook website" className="rounded-lg"><Logo /></a>
 
         <nav aria-label="Dashboard" className="ml-4 hidden h-16 items-stretch md:flex">
-          {TABS.map((t) => tab(keep(t.href), t.label, pathname === t.href))}
+          {tabs.map((t) => tab(keep(t.href), t.label, pathname === t.href))}
           {isAdmin && tab("/admin", "Admin", inAdmin)}
         </nav>
 
@@ -168,7 +170,7 @@ export function TopBar({ email, isAdmin, clients, isDemo }: Props) {
       {/* Mobile: tabs + client switcher on a second row */}
       <div className="flex items-center gap-2 overflow-x-auto border-t border-line px-2 md:hidden">
         <nav aria-label="Dashboard (mobile)" className="flex items-stretch">
-          {TABS.map((t) => tab(keep(t.href), t.label, pathname === t.href))}
+          {tabs.map((t) => tab(keep(t.href), t.label, pathname === t.href))}
           {isAdmin && tab("/admin", "Admin", inAdmin)}
         </nav>
       </div>

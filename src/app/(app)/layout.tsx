@@ -7,7 +7,7 @@ import { isDemo } from "@/lib/env";
 async function TopBarLoader() {
   const viewer = await getViewer();
   const clients = (await listClients()).filter((c) => c.status === "active");
-  return <TopBar email={viewer.email} isAdmin={viewer.isAdmin} clients={clients.map((c) => ({ id: c.id, name: c.name }))} isDemo={isDemo} />;
+  return <TopBar email={viewer.email} isAdmin={viewer.isAdmin} clients={clients.map((c) => ({ id: c.id, name: c.name, primary_goal: c.primary_goal }))} isDemo={isDemo} />;
 }
 
 function TopBarSkeleton() {

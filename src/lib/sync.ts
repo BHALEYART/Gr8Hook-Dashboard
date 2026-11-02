@@ -33,7 +33,9 @@ export async function syncClient(db: SupabaseClient, client: Client, opts: { bac
 
   if (on("google_ads") && client.google_ads_customer_id) {
     await run("google", async () => {
-      const rows = await fetchGoogleAdsDaily(client.id, client.google_ads_customer_id!, since, until);
+      const { data: refreshToken } = await db.rpc("get_ad_token", { cid: client.id, kind: "google" });
+      const rows = await fetchGoogleAdsDaily(client.id, client.google_ads_customer_id!, since, until,
+        { refreshToken: refreshToken as string | null, loginCustomerId: client.google_login_customer_id });
       if (rows.length) {
         const { error } = await db.from("ad_metrics_daily").upsert(rows.map((r) => ({ ...r, synced_at: new Date().toISOString() })));
         if (error) throw error;
@@ -44,7 +46,8 @@ export async function syncClient(db: SupabaseClient, client: Client, opts: { bac
 
   if (on("meta_ads") && client.meta_ad_account_id) {
     await run("meta", async () => {
-      const rows = await fetchMetaDaily(client.id, client.meta_ad_account_id!, since, until);
+      const { data: token } = await db.rpc("get_ad_token", { cid: client.id, kind: "meta" });
+      const rows = await fetchMetaDaily(client.id, client.meta_ad_account_id!, since, until, token as string | null);
       if (rows.length) {
         const { error } = await db.from("ad_metrics_daily").upsert(rows.map((r) => ({ ...r, synced_at: new Date().toISOString() })));
         if (error) throw error;

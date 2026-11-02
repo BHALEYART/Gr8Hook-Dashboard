@@ -35,7 +35,7 @@ Every data table has a `client_id`. Postgres Row Level Security only returns row
 
 ## Go live
 
-1. **Supabase:** create a project, then run `supabase/migrations/0001_init.sql`, `0002_reach_and_labels.sql` and `0003_shopify.sql` (in that order) in the SQL editor.
+1. **Supabase:** create a project, then run `supabase/migrations/0001_init.sql`, `0002_reach_and_labels.sql`, `0003_shopify.sql` and `0004_ad_connections.sql` (in that order) in the SQL editor.
 2. **Make yourself admin:** sign up once through the app (or add your user under Authentication), then run
    `update public.profiles set is_admin = true where email = 'you@example.com';`
 3. **Auth settings:** in Supabase → Authentication → URL configuration, set the Site URL to your app URL and add `https://YOUR-APP/auth/callback` as a redirect URL. Turn off public sign-ups (invite-only).
@@ -77,6 +77,22 @@ If a store already has an Admin API token from an older custom app, paste it in 
 `fbclid` alone isn't counted, because Facebook adds it to organic link clicks too. Everything else shows as unattributed. Some ad buyers always will (other devices, blocked tracking, coming back days later), so the store number is a floor and the platforms' own (view-through, modeled) numbers usually run higher. The dashboard shows both. Ad spend can't be split by product, so ROAS shows for the whole store only.
 
 Optional env: `SHOPIFY_API_VERSION` (defaults to `2026-10`).
+
+## Connect Facebook / Connect Google
+
+Admins (client settings → **Ad account connections**) and client owners (account menu → **Connections**) can sign in to Facebook or Google, then pick the ad account the dashboard should read. Tokens are stored in Supabase Vault for that client. Clients without a connection keep using the shared tokens in the env vars.
+
+**Google setup**
+1. Google Cloud → APIs & Services → Credentials → your OAuth client. It must be a **Web application** client (create one if yours is Desktop, and update `GOOGLE_ADS_CLIENT_ID/SECRET`).
+2. Add `https://app.gr8hook.com/api/connect/google/callback` under **Authorized redirect URIs**.
+3. Until Google verifies the OAuth consent screen, people see an "unverified app" warning they can click through, and the number of users is capped. Submit for verification before offering it to other agencies.
+
+**Meta setup**
+1. In the Meta app: **Add product → Facebook Login for Business** (or Facebook Login).
+2. Add `https://app.gr8hook.com/api/connect/meta/callback` to **Valid OAuth Redirect URIs**.
+3. Add `META_APP_ID` and `META_APP_SECRET` (App settings → Basic) in Vercel. Optionally create a Login configuration with `ads_read` and `business_management` and set `META_LOGIN_CONFIG_ID`.
+4. Until the app has **Advanced Access** to `ads_read` (Business Verification + App Review), only people with a role on the Meta app can connect. Add yourself and testers under App roles in the meantime.
+5. Regular user tokens last about 60 days. The settings card shows when it renews and turns red two weeks before; reconnecting renews it.
 
 ## Next steps
 

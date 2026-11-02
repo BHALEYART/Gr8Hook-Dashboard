@@ -23,6 +23,10 @@ export interface Client {
   shopify_shop?: string | null;
   /** Client ID of the Shopify app installed on that store (not secret). */
   shopify_client_id?: string | null;
+  google_login_customer_id?: string | null;
+  meta_connected_as?: string | null;
+  google_connected_as?: string | null;
+  meta_token_expires_at?: string | null;
   created_at: string;
 }
 

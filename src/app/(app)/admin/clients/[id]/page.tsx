@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdConnections, connectMessage } from "@/components/AdConnections";
 import { ClientFields } from "@/components/ClientFields";
 import { DemoNotice, Notice, PageHeader, PlatformBadge } from "@/components/ui";
+import { getConnections } from "@/lib/connections";
 import { getClient, getMappings, getServices, requireAdmin } from "@/lib/data";
 import { isDemo } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
@@ -16,7 +18,8 @@ export default async function ClientSettingsPage({ params, searchParams }: PageP
   const sp = await searchParams;
   const client = await getClient(id);
   if (!client) notFound();
-  const [services, mappings] = await Promise.all([getServices(id), getMappings(id)]);
+  const [services, mappings, connections] = await Promise.all([getServices(id), getMappings(id), getConnections(client)]);
+  const connectNote = connectMessage(sp.connect);
   const usesShopify = client.primary_goal === "ecommerce" || services.some((s) => s.service === "shopify" && s.enabled);
   let shopifyConnected = false;
   if (usesShopify) {
@@ -44,6 +47,7 @@ export default async function ClientSettingsPage({ params, searchParams }: PageP
       {sp.saved === "1" && <Notice>Saved.</Notice>}
       {sp.created === "1" && <Notice>Client created. The first data sync runs tonight.</Notice>}
       {sp.invited === "1" && <Notice>Invite sent.</Notice>}
+      {connectNote && <Notice>{connectNote}</Notice>}
       {typeof sp.shopify === "string" && shopifyNotice[sp.shopify] && <Notice>{shopifyNotice[sp.shopify]}</Notice>}
 
       <div className="grid max-w-4xl gap-6">
@@ -52,6 +56,15 @@ export default async function ClientSettingsPage({ params, searchParams }: PageP
           <ClientFields client={client} services={services} />
           <div><button className="btn btn-coral" type="submit">Save settings</button></div>
         </form>
+
+        <section id="connections" aria-labelledby="conn-title">
+          <h2 id="conn-title" className="font-display text-lg font-bold">Ad account connections</h2>
+          <p className="mb-4 mt-1 text-sm text-ink-2">
+            Sign in to Facebook or Google to connect this client&apos;s ad accounts, or send the owner to their Connections page to do it themselves.
+            Without a connection, syncs use the agency&apos;s shared access and the IDs above.
+          </p>
+          <AdConnections clientId={id} from="admin" connections={connections} />
+        </section>
 
         {usesShopify && (
           <section id="shopify" className="card flex flex-wrap items-center justify-between gap-4 p-6 sm:p-8" aria-labelledby="shop-title">

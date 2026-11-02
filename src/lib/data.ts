@@ -31,6 +31,15 @@ export async function requireAdmin(): Promise<Viewer> {
   return viewer;
 }
 
+/** Admins, or the client's owner, may connect/disconnect that client's ad accounts. */
+export async function canManageClient(viewer: Viewer, clientId: string): Promise<boolean> {
+  if (viewer.isAdmin) return true;
+  if (isDemo || !viewer.clientIds.includes(clientId)) return false;
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("can_manage_client", { cid: clientId });
+  return data === true;
+}
+
 export async function listClients(): Promise<Client[]> {
   if (isDemo) return DEMO_CLIENTS;
   const supabase = await createClient();

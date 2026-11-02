@@ -158,6 +158,9 @@ export function TopBar({ email, isAdmin, clients, isDemo }: Props) {
                     <Link role="menuitem" href="/admin/clients/new" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center px-4 text-sm hover:bg-panel-2">Add client</Link>
                   </div>
                 )}
+                <div className="border-b border-line py-1">
+                  <Link role="menuitem" href={keep("/dashboard/connections")} onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center px-4 text-sm hover:bg-panel-2">Connections</Link>
+                </div>
                 <form action={signOut} className="py-1">
                   <button role="menuitem" type="submit" className="flex min-h-11 w-full items-center px-4 text-left text-sm hover:bg-panel-2">Sign out</button>
                 </form>

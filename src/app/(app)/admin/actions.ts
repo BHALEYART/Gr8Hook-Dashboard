@@ -5,9 +5,10 @@ import { redirect } from "next/navigation";
 import { isDemo } from "@/lib/env";
 import { requireAdmin } from "@/lib/data";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { normalizeShop } from "@/lib/integrations/shopify";
 import type { ServiceKey } from "@/lib/types";
 
-const SERVICES: ServiceKey[] = ["meta_ads", "google_ads", "ghl", "callrail"];
+const SERVICES: ServiceKey[] = ["meta_ads", "google_ads", "ghl", "callrail", "shopify"];
 const str = (f: FormData, k: string) => {
   const v = f.get(k);
   return typeof v === "string" && v.trim() ? v.trim() : null;
@@ -33,6 +34,8 @@ export async function createClientAction(formData: FormData) {
       google_ads_customer_id: str(formData, "google_ads_customer_id"),
       meta_ad_account_id: str(formData, "meta_ad_account_id"),
       ghl_location_id: str(formData, "ghl_location_id"),
+      shopify_shop: normalizeShop(str(formData, "shopify_shop")),
+      shopify_client_id: str(formData, "shopify_client_id"),
     })
     .select("id")
     .single();
@@ -43,6 +46,7 @@ export async function createClientAction(formData: FormData) {
   );
   const token = str(formData, "ghl_token");
   if (token) await supabase.rpc("set_ghl_token", { cid: data.id, token });
+  await saveShopifySecrets(supabase, data.id, formData);
   const invite = str(formData, "invite_email");
   if (invite) await inviteUser(data.id, invite, "client_owner");
 
@@ -66,6 +70,8 @@ export async function updateClientAction(formData: FormData) {
       google_ads_customer_id: str(formData, "google_ads_customer_id"),
       meta_ad_account_id: str(formData, "meta_ad_account_id"),
       ghl_location_id: str(formData, "ghl_location_id"),
+      shopify_shop: normalizeShop(str(formData, "shopify_shop")),
+      shopify_client_id: str(formData, "shopify_client_id"),
     })
     .eq("id", id);
   await supabase.from("client_services").upsert(
@@ -73,6 +79,7 @@ export async function updateClientAction(formData: FormData) {
   );
   const token = str(formData, "ghl_token");
   if (token) await supabase.rpc("set_ghl_token", { cid: id, token });
+  await saveShopifySecrets(supabase, id, formData);
   revalidatePath(`/admin/clients/${id}`);
   redirect(`/admin/clients/${id}?saved=1`);
 }
@@ -131,6 +138,14 @@ export async function setStatusAction(formData: FormData) {
   // Deactivated clients are skipped by the nightly sync and their users lose access via RLS
   // only if you also remove memberships; keeping them lets you reactivate cleanly.
   redirect(`/admin/clients/${id}?saved=1`);
+}
+
+/** Shopify app secret and (optional) pre-existing Admin API token go straight to Vault. */
+async function saveShopifySecrets(supabase: Awaited<ReturnType<typeof createClient>>, cid: string, formData: FormData) {
+  const secret = str(formData, "shopify_secret");
+  if (secret) await supabase.rpc("set_shopify_secret", { cid, secret });
+  const token = str(formData, "shopify_token");
+  if (token) await supabase.rpc("set_shopify_token", { cid, token });
 }
 
 /** Sends a Supabase invite email and links the user to the client. Needs the service role key. */

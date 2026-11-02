@@ -2,8 +2,8 @@
 
 export type Role = "admin" | "client_owner" | "client_staff";
 export type Platform = "google" | "meta";
-export type ServiceKey = "meta_ads" | "google_ads" | "ghl" | "callrail";
-export type PrimaryGoal = "leads" | "sales" | "appointments";
+export type ServiceKey = "meta_ads" | "google_ads" | "ghl" | "callrail" | "shopify";
+export type PrimaryGoal = "leads" | "sales" | "appointments" | "ecommerce";
 
 export interface Client {
   id: string;
@@ -19,6 +19,10 @@ export interface Client {
   show_reach?: boolean;
   /** What this client calls a lead, e.g. "Consults" or "Signups". Defaults to "Leads". */
   lead_label?: string | null;
+  /** Shopify store, e.g. "lakeshore-candle.myshopify.com" (E-commerce mode). */
+  shopify_shop?: string | null;
+  /** Client ID of the Shopify app installed on that store (not secret). */
+  shopify_client_id?: string | null;
   created_at: string;
 }
 
@@ -131,4 +135,48 @@ export interface CampaignRow {
   leads: number;
   revenue: number;
   service: string | null;
+}
+
+/** A Shopify order with the ad source we could tie it to. */
+export interface StoreOrder {
+  client_id: string;
+  order_id: string;
+  name: string; // "#1042"
+  created_at: string;
+  total: number;
+  currency: string;
+  cancelled: boolean;
+  platform: Platform | null; // ad platform the order came from, if any
+  campaign_id: string | null; // matched campaign, when utm_campaign carries the campaign ID
+  match_method: "utm" | "click_id" | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  utm_content: string | null;
+  landing_page: string | null;
+  referrer: string | null;
+}
+
+export interface StoreOrderLine {
+  client_id: string;
+  order_id: string;
+  line_id: string;
+  product_id: string | null;
+  product_title: string;
+  variant_title: string | null;
+  quantity: number;
+  amount: number; // line total after discounts
+}
+
+/** Store numbers for one month, either for the whole store or for one product. */
+export interface StoreMonth {
+  orders: number;
+  units: number;
+  revenue: number;
+  ad_orders: number;
+  ad_revenue: number;
+  meta_orders: number;
+  meta_revenue: number;
+  google_orders: number;
+  google_revenue: number;
 }

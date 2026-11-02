@@ -5,11 +5,12 @@ const SERVICES = [
   { key: "google_ads", label: "Google Ads", hint: "Search & Performance Max" },
   { key: "ghl", label: "GoHighLevel", hint: "Leads, opportunities, appointments" },
   { key: "callrail", label: "CallRail", hint: "Call tracking (via GHL)" },
+  { key: "shopify", label: "Shopify", hint: "Store orders, products, UTMs" },
 ];
 
 /** Shared form fields for creating and editing a client. */
 export function ClientFields({ client, services }: { client?: Client; services?: ClientService[] }) {
-  const enabled = (k: string) => (services ? services.some((s) => s.service === k && s.enabled) : k !== "callrail");
+  const enabled = (k: string) => (services ? services.some((s) => s.service === k && s.enabled) : k !== "callrail" && k !== "shopify");
   return (
     <div className="grid gap-6">
       <fieldset className="grid gap-4 sm:grid-cols-2">
@@ -24,6 +25,7 @@ export function ClientFields({ client, services }: { client?: Client; services?:
             <option value="leads">Leads</option>
             <option value="sales">Sales</option>
             <option value="appointments">Appointments / bookings</option>
+            <option value="ecommerce">E-commerce sales (Shopify)</option>
           </select>
         </div>
         <div className="field">
@@ -73,6 +75,32 @@ export function ClientFields({ client, services }: { client?: Client; services?:
           <input className="input" id="ghl_token" name="ghl_token" type="password" autoComplete="off"
             placeholder={client ? "Leave blank to keep the current token" : "pit-…"} />
           <span className="text-xs text-ink-3">Stored encrypted in Supabase Vault. Never shown again.</span>
+        </div>
+      </fieldset>
+
+      <fieldset className="grid gap-4 sm:grid-cols-2">
+        <legend className="mb-1 font-display text-base font-bold">Shopify store</legend>
+        <p className="text-sm text-ink-2 sm:col-span-2">
+          From the client&apos;s Gr8 Hook app in the Shopify Dev Dashboard. Save, then use <strong>Connect Shopify</strong> to install it on the store.
+        </p>
+        <div className="field">
+          <label className="label" htmlFor="shopify_shop">Store domain</label>
+          <input className="input" id="shopify_shop" name="shopify_shop" placeholder="store-name.myshopify.com" defaultValue={client?.shopify_shop ?? ""} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="shopify_client_id">App client ID</label>
+          <input className="input" id="shopify_client_id" name="shopify_client_id" autoComplete="off" defaultValue={client?.shopify_client_id ?? ""} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="shopify_secret">App client secret</label>
+          <input className="input" id="shopify_secret" name="shopify_secret" type="password" autoComplete="off"
+            placeholder={client ? "Leave blank to keep the current secret" : ""} />
+          <span className="text-xs text-ink-3">Stored encrypted in Supabase Vault. Never shown again.</span>
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="shopify_token">Existing Admin API token (optional)</label>
+          <input className="input" id="shopify_token" name="shopify_token" type="password" autoComplete="off" placeholder="shpat_… (only if the store already has one)" />
+          <span className="text-xs text-ink-3">Skip this if you&apos;ll use Connect Shopify.</span>
         </div>
       </fieldset>
     </div>

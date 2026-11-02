@@ -6,7 +6,7 @@ import { getServices, listClients, requireAdmin } from "@/lib/data";
 export const metadata: Metadata = { title: "Clients" };
 
 const SERVICE_LABEL: Record<string, string> = { meta_ads: "Meta", google_ads: "Google", ghl: "GoHighLevel", callrail: "CallRail" };
-const GOAL_LABEL: Record<string, string> = { leads: "Leads", sales: "Sales", appointments: "Appointments" };
+const GOAL_LABEL: Record<string, string> = { leads: "Leads", sales: "Sales", appointments: "Appointments", ecommerce: "E-commerce" };
 
 export default async function AdminPage() {
   await requireAdmin();

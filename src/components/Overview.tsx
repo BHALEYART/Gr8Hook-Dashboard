@@ -392,7 +392,7 @@ export function Overview({ client, monthsBack, rows, current, previous, campaign
   );
 }
 
-function Ring({ parts, total }: { parts: { key: string; n: number; color: string }[]; total: number }) {
+export function Ring({ parts, total }: { parts: { key: string; n: number; color: string }[]; total: number }) {
   const r = 34, c = 2 * Math.PI * r;
   let offset = 0;
   return (

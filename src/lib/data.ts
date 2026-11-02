@@ -3,9 +3,10 @@
 import { redirect } from "next/navigation";
 import { isDemo } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_CLIENTS, DEMO_SERVICES, demoBundle } from "@/lib/demo-data";
+import { DEMO_CLIENTS, DEMO_SERVICES, demoBundle, demoStore } from "@/lib/demo-data";
+import { buildStoreData } from "@/lib/store";
 import { campaignRows, lastMonths, monthKey, rollupMonthly, type DashboardInput } from "@/lib/metrics";
-import type { Annotation, CampaignMapping, CampaignRow, Client, ClientService, Lead, Viewer } from "@/lib/types";
+import type { AdMetricDaily, Annotation, CampaignMapping, CampaignRow, Client, ClientService, Lead, StoreOrder, StoreOrderLine, Viewer } from "@/lib/types";
 
 export async function getViewer(): Promise<Viewer> {
   if (isDemo) return { userId: "demo", email: "demo@gr8hook.com", isAdmin: true, clientIds: DEMO_CLIENTS.map((c) => c.id) };
@@ -111,6 +112,45 @@ export async function getCampaigns(clientId: string, monthsBack: number) {
   const months = lastMonths(monthsBack);
   const input = await loadInput(clientId, `${months[0]}-01`);
   return campaignRows(input, months);
+}
+
+/** E-commerce Overview: Shopify orders tied to ads, monthly and per product, with spend and platform-reported purchases. */
+export async function getStore(clientId: string, monthsBack: number) {
+  const all = lastMonths(monthsBack * 2);
+  const current = all.slice(monthsBack);
+  const since = `${all[0]}-01`;
+  let metrics: AdMetricDaily[], orders: StoreOrder[], lines: StoreOrderLine[], annotations: Annotation[];
+  if (isDemo) {
+    const st = demoStore(clientId);
+    metrics = st.metrics.filter((m) => m.date >= since);
+    orders = st.orders.filter((o) => o.created_at >= since);
+    const ids = new Set(orders.map((o) => o.order_id));
+    lines = st.lines.filter((l) => ids.has(l.order_id));
+    annotations = st.annotations;
+  } else {
+    const supabase = await createClient();
+    // Page through results; Supabase returns at most 1,000 rows per request.
+    async function paged<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown[] | null }>): Promise<T[]> {
+      const out: T[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data } = await build(from, from + 999);
+        out.push(...((data ?? []) as T[]));
+        if (!data || data.length < 1000) return out;
+      }
+    }
+    const [m, o, notes] = await Promise.all([
+      paged<AdMetricDaily>((f, t) => supabase.from("ad_metrics_daily").select("*").eq("client_id", clientId).gte("date", since).range(f, t)),
+      paged<StoreOrder & { shopify_order_lines: StoreOrderLine[] }>((f, t) =>
+        supabase.from("shopify_orders").select("*, shopify_order_lines(*)").eq("client_id", clientId).gte("created_at", since).order("created_at").range(f, t)),
+      supabase.from("annotations").select("*").eq("client_id", clientId).gte("date", since).order("date"),
+    ]);
+    metrics = m.map((r) => ({ ...r, spend: Number(r.spend), conversions: Number(r.conversions), conversion_value: Number(r.conversion_value) }));
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    orders = o.map(({ shopify_order_lines: _l, ...r }) => ({ ...r, total: Number(r.total) }));
+    lines = o.flatMap((r) => r.shopify_order_lines.map((l) => ({ ...l, amount: Number(l.amount) })));
+    annotations = (notes.data ?? []) as Annotation[];
+  }
+  return { ...buildStoreData(all, current, metrics, orders, lines), annotations: annotations.filter((a) => all.includes(monthKey(a.date))) };
 }
 
 export async function getRecentLeads(clientId: string, limit = 50) {

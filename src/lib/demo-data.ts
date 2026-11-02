@@ -1,6 +1,6 @@
 // Sample data for demo mode. Deterministic (seeded) so screens look the same on every load.
 import type {
-  AdMetricDaily, Annotation, Appointment, CampaignMapping, Client, ClientService, Lead, Opportunity,
+  AdMetricDaily, Annotation, Appointment, CampaignMapping, Client, ClientService, Lead, Opportunity, StoreOrder, StoreOrderLine,
 } from "@/lib/types";
 
 function rng(seed: number) {
@@ -26,6 +26,9 @@ export const DEMO_CLIENTS: Client[] = [
   { id: "demo-creator", name: "Kayla Rae Creative Course (demo)", status: "active", primary_goal: "sales", brand_color: null,
     lead_label: "Email signups", show_reach: true,
     google_ads_customer_id: "345-678-9012", meta_ad_account_id: "act_810910010", ghl_location_id: "loc_demo_creator", created_at: "2025-10-01" },
+  { id: "demo-shop", name: "Lakeshore Candle Co. (demo)", status: "active", primary_goal: "ecommerce", brand_color: null,
+    shopify_shop: "lakeshore-candle.myshopify.com", shopify_client_id: "demo",
+    google_ads_customer_id: "456-789-0123", meta_ad_account_id: "act_920020030", ghl_location_id: null, created_at: "2025-08-15" },
 ];
 
 export const DEMO_SERVICES: ClientService[] = [
@@ -45,6 +48,11 @@ export const DEMO_SERVICES: ClientService[] = [
   { client_id: "demo-creator", service: "google_ads", enabled: true },
   { client_id: "demo-creator", service: "ghl", enabled: true },
   { client_id: "demo-creator", service: "callrail", enabled: false },
+  { client_id: "demo-shop", service: "meta_ads", enabled: true },
+  { client_id: "demo-shop", service: "google_ads", enabled: true },
+  { client_id: "demo-shop", service: "shopify", enabled: true },
+  { client_id: "demo-shop", service: "ghl", enabled: false },
+  { client_id: "demo-shop", service: "callrail", enabled: false },
 ];
 
 interface CampaignDef {
@@ -100,6 +108,12 @@ const cache = new Map<string, DemoBundle>();
 export function demoBundle(clientId: string): DemoBundle {
   const hit = cache.get(clientId);
   if (hit) return hit;
+  if (STORE_CAMPAIGNS[clientId]) {
+    const st = demoStore(clientId);
+    const bundle: DemoBundle = { metrics: st.metrics, leads: [], opportunities: [], appointments: [], mappings: st.mappings, annotations: st.annotations };
+    cache.set(clientId, bundle);
+    return bundle;
+  }
   const r = rng(clientId.length * 7919 + clientId.charCodeAt(5));
   const ra = rng(clientId.length * 104729 + clientId.charCodeAt(6)); // separate stream for attention metrics
   const camps = CAMPAIGNS[clientId] ?? [];
@@ -108,7 +122,7 @@ export function demoBundle(clientId: string): DemoBundle {
   const opportunities: Opportunity[] = [];
   const appointments: Appointment[] = [];
   const today = new Date();
-  const DAYS = 400;
+  const DAYS = 760; // two years, so a 12-month view has a full prior period to compare against
   let n = 0;
 
   for (let d = DAYS; d >= 0; d--) {
@@ -166,4 +180,126 @@ export function demoBundle(clientId: string): DemoBundle {
   const bundle = { metrics, leads, opportunities, appointments, mappings, annotations };
   cache.set(clientId, bundle);
   return bundle;
+}
+
+// ───────────────────────── E-commerce demo (Shopify) ─────────────────────────
+
+interface Product { id: string; title: string; price: number }
+const PRODUCTS: Product[] = [
+  { id: "p-pine", title: "Lakeside Pine Candle", price: 32 },
+  { id: "p-cedar", title: "Cedar & Smoke Candle", price: 34 },
+  { id: "p-lav", title: "Lavender Fields Candle", price: 28 },
+  { id: "p-gift", title: "Seasonal 3-Pack Gift Set", price: 79 },
+  { id: "p-melt", title: "Wax Melt Sampler", price: 22 },
+  { id: "p-trim", title: "Wick Trimmer", price: 18 },
+];
+const WEIGHTS = [0.24, 0.2, 0.18, 0.16, 0.13, 0.09];
+
+interface StoreCampaign { id: string; name: string; platform: "google" | "meta"; daily: number; cpc: number; cvr: number; focus?: string; reportX: number }
+const STORE_CAMPAIGNS: Record<string, StoreCampaign[]> = {
+  "demo-shop": [
+    { id: "m-71001", name: "Advantage+ Shopping | All Candles", platform: "meta", daily: 55, cpc: 0.95, cvr: 0.028, reportX: 1.35 },
+    { id: "m-71002", name: "Retargeting | Cart Abandoners", platform: "meta", daily: 18, cpc: 1.15, cvr: 0.065, reportX: 1.3 },
+    { id: "m-71003", name: "Reels | Gift Set Launch", platform: "meta", daily: 24, cpc: 0.7, cvr: 0.016, focus: "p-gift", reportX: 1.45 },
+    { id: "g-72001", name: "Shopping | Candles", platform: "google", daily: 32, cpc: 0.62, cvr: 0.03, reportX: 1.1 },
+    { id: "g-72002", name: "Search | Lakeshore Candle (Brand)", platform: "google", daily: 7, cpc: 0.45, cvr: 0.08, reportX: 1.05 },
+  ],
+};
+const STORE_NOTES: Record<string, [number, string][]> = {
+  "demo-shop": [[5, "Advantage+ Shopping launched"], [3, "Cart abandoner retargeting added"], [1, "Gift set Reels for the holidays"]],
+};
+
+const storeCache = new Map<string, { metrics: AdMetricDaily[]; orders: StoreOrder[]; lines: StoreOrderLine[]; mappings: CampaignMapping[]; annotations: Annotation[] }>();
+
+/** Sample Shopify orders, their ad sources, and the platform-reported (Pixel / Google tag) purchases. */
+export function demoStore(clientId: string) {
+  const hit = storeCache.get(clientId);
+  if (hit) return hit;
+  const r = rng(clientId.length * 31337 + clientId.charCodeAt(5));
+  const camps = STORE_CAMPAIGNS[clientId] ?? [];
+  const metrics: AdMetricDaily[] = [];
+  const orders: StoreOrder[] = [];
+  const lines: StoreOrderLine[] = [];
+  const today = new Date();
+  const DAYS = 760; // two years, so a 12-month view has a full prior period to compare against
+  let num = 1000, lineNo = 0;
+
+  const pick = (focus?: string) => {
+    if (focus && r() < 0.65) return PRODUCTS.find((p) => p.id === focus)!;
+    let x = r();
+    for (let i = 0; i < PRODUCTS.length; i++) { x -= WEIGHTS[i]; if (x <= 0) return PRODUCTS[i]; }
+    return PRODUCTS[0];
+  };
+  const makeOrder = (iso: string, attrib: Partial<StoreOrder>, focus?: string) => {
+    num++;
+    const id = `${clientId}-o${num}`;
+    const items = 1 + (r() < 0.35 ? 1 : 0) + (r() < 0.1 ? 1 : 0);
+    const used = new Set<string>();
+    let total = 0;
+    for (let i = 0; i < items; i++) {
+      const p = pick(i === 0 ? focus : undefined);
+      if (used.has(p.id)) continue;
+      used.add(p.id);
+      const qty = r() < 0.2 ? 2 : 1;
+      const amount = Math.round(p.price * qty * (r() < 0.15 ? 0.85 : 1) * 100) / 100;
+      total += amount;
+      lines.push({ client_id: clientId, order_id: id, line_id: `${id}-l${++lineNo}`, product_id: p.id, product_title: p.title, variant_title: null, quantity: qty, amount });
+    }
+    const shipping = total >= 60 ? 0 : 6.95;
+    orders.push({
+      client_id: clientId, order_id: id, name: `#${num}`, created_at: `${iso}T${String(9 + Math.floor(r() * 12)).padStart(2, "0")}:${String(Math.floor(r() * 60)).padStart(2, "0")}:00Z`,
+      total: Math.round((total + shipping) * 100) / 100, currency: "USD", cancelled: r() < 0.02,
+      platform: null, campaign_id: null, match_method: null, utm_source: null, utm_medium: null, utm_campaign: null, utm_content: null,
+      landing_page: "/", referrer: null, ...attrib,
+    });
+    return total + shipping;
+  };
+
+  for (let d = DAYS; d >= 0; d--) {
+    const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d));
+    const iso = date.toISOString().slice(0, 10);
+    const month = date.getUTCMonth();
+    const season = month === 10 ? 1.45 : month === 11 ? 1.8 : month === 0 ? 0.8 : month >= 5 && month <= 7 ? 0.85 : 1;
+    const ramp = 0.75 + 0.5 * ((DAYS - d) / DAYS);
+    for (const c of camps) {
+      const spend = c.daily * (0.85 + r() * 0.3) * (season > 1 ? 1 + (season - 1) * 0.6 : 1);
+      const clicks = Math.max(0, Math.round((spend / c.cpc) * (0.85 + r() * 0.3)));
+      const exp = clicks * c.cvr * ramp * Math.sqrt(season);
+      const buys = Math.floor(exp) + (r() < exp % 1 ? 1 : 0);
+      let value = 0;
+      for (let i = 0; i < buys; i++) {
+        const x = r();
+        // Most ad buyers keep their UTM tags; some lose them (other device, cleared cookies) and land as unattributed.
+        const attrib: Partial<StoreOrder> = x < 0.76
+          ? { platform: c.platform, campaign_id: c.id, match_method: "utm", utm_source: c.platform === "meta" ? "facebook" : "google",
+              utm_medium: c.platform === "meta" ? "paid" : "cpc", utm_campaign: c.id, landing_page: `/products?utm_campaign=${c.id}` }
+          : x < 0.84 && c.platform === "google"
+            ? { platform: "google", match_method: "click_id", landing_page: "/collections/candles?gclid=demo" }
+            : { landing_page: "/" };
+        value += makeOrder(iso, attrib, c.focus);
+      }
+      // What the ad platform reports (Pixel / Google tag): includes view-through and modeled purchases.
+      const reported = Math.round(buys * c.reportX + (r() - 0.5));
+      metrics.push({ client_id: clientId, platform: c.platform, campaign_id: c.id, campaign_name: c.name, date: iso,
+        spend: Math.round(spend * 100) / 100, impressions: Math.round(clicks * (40 + r() * 30)), clicks,
+        conversions: Math.max(0, reported), conversion_value: Math.round(value * c.reportX * 100) / 100 });
+    }
+    // Organic, email and direct orders
+    const organic = 2.4 * season * ramp;
+    const n = Math.floor(organic) + (r() < organic % 1 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const x = r();
+      makeOrder(iso, x < 0.25 ? { utm_source: "klaviyo", utm_medium: "email", landing_page: "/?utm_source=klaviyo&utm_medium=email" }
+        : x < 0.4 ? { utm_source: "instagram", utm_medium: "social", referrer: "https://instagram.com/", landing_page: "/?utm_source=instagram&utm_medium=social" }
+        : { referrer: x < 0.6 ? "https://www.google.com/" : null });
+    }
+  }
+  const mappings = camps.map((c) => ({ client_id: clientId, campaign_id: c.id, product_or_service: c.focus ? PRODUCTS.find((p) => p.id === c.focus)!.title : "All products" }));
+  const annotations: Annotation[] = (STORE_NOTES[clientId] ?? []).map(([back, note], i) => ({
+    id: `${clientId}-n${i + 1}`, client_id: clientId, note,
+    date: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - back, 8)).toISOString().slice(0, 10),
+  }));
+  const out = { metrics, orders, lines, mappings, annotations };
+  storeCache.set(clientId, out);
+  return out;
 }

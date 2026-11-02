@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Overview } from "@/components/Overview";
+import { StoreOverview } from "@/components/StoreOverview";
 import { Empty, RangeTabs, parseMonths } from "@/components/ui";
-import { getDashboard, getViewer, resolveClient } from "@/lib/data";
+import { getDashboard, getStore, getViewer, resolveClient } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -13,6 +14,11 @@ export default async function OverviewPage({ searchParams }: PageProps<"/dashboa
     return <Empty title="No client yet">Your account isn&apos;t linked to a client. Contact Gr8 Hook to get set up.</Empty>;
   }
   const months = parseMonths(sp.months);
+  const rangeTabs = <RangeTabs base="/dashboard" clientId={client.id} months={months} />;
+  if (client.primary_goal === "ecommerce") {
+    const store = await getStore(client.id, months);
+    return <StoreOverview key={`${client.id}-${months}`} client={{ id: client.id, name: client.name }} monthsBack={months} {...store} rangeTabs={rangeTabs} />;
+  }
   const data = await getDashboard(client.id, months);
 
   return (
@@ -21,7 +27,7 @@ export default async function OverviewPage({ searchParams }: PageProps<"/dashboa
       client={{ id: client.id, name: client.name, primary_goal: client.primary_goal, show_reach: client.show_reach, lead_label: client.lead_label }}
       monthsBack={months}
       {...data}
-      rangeTabs={<RangeTabs base="/dashboard" clientId={client.id} months={months} />}
+      rangeTabs={rangeTabs}
     />
   );
 }

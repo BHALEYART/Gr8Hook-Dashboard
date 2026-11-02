@@ -4,7 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchGoogleAdsDaily } from "@/lib/integrations/google-ads";
 import { fetchMetaDaily } from "@/lib/integrations/meta-ads";
 import { fetchAppointments, fetchContacts, fetchOpportunities } from "@/lib/integrations/gohighlevel";
-import type { Client } from "@/lib/types";
+import { fetchShopifyOrders, normalizeShop } from "@/lib/integrations/shopify";
+import type { Client, Platform } from "@/lib/types";
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const daysAgo = (n: number) => isoDay(new Date(Date.now() - n * 86_400_000));
@@ -17,7 +18,7 @@ export async function syncClient(db: SupabaseClient, client: Client, opts: { bac
   const on = (s: string) => services?.some((x) => x.service === s && x.enabled);
   const results: Record<string, string> = {};
 
-  async function run(source: "google" | "meta" | "ghl", job: () => Promise<number>) {
+  async function run(source: "google" | "meta" | "ghl" | "shopify", job: () => Promise<number>) {
     const { data: runRow } = await db.from("sync_runs").insert({ client_id: client.id, source }).select("id").single();
     try {
       const rows = await job();
@@ -88,6 +89,28 @@ export async function syncClient(db: SupabaseClient, client: Client, opts: { bac
         if (error) throw error;
       }
       return leads.length + opps.length + appts.length;
+    });
+  }
+
+  const shop = normalizeShop(client.shopify_shop);
+  if (on("shopify") && shop) {
+    await run("shopify", async () => {
+      const { data: token } = await db.rpc("get_shopify_token", { cid: client.id });
+      if (!token) throw new Error("Shopify isn't connected yet (use Connect Shopify in client settings)");
+      // Campaign ID → platform, so utm_campaign={{campaign.id}} matches an exact campaign.
+      const { data: camps } = await db.from("ad_metrics_daily").select("campaign_id, platform").eq("client_id", client.id);
+      const known = new Map<string, Platform>((camps ?? []).map((c) => [c.campaign_id as string, c.platform as Platform]));
+      const { orders, lines } = await fetchShopifyOrders(client.id, shop, token as string, since, known);
+      const now = new Date().toISOString();
+      if (orders.length) {
+        const { error } = await db.from("shopify_orders").upsert(orders.map((o) => ({ ...o, synced_at: now })), { onConflict: "client_id,order_id" });
+        if (error) throw error;
+      }
+      if (lines.length) {
+        const { error } = await db.from("shopify_order_lines").upsert(lines, { onConflict: "client_id,line_id" });
+        if (error) throw error;
+      }
+      return orders.length;
     });
   }
 

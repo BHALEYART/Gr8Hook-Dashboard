@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { ClientFields } from "@/components/ClientFields";
 import { DemoNotice, Notice, PageHeader, PlatformBadge } from "@/components/ui";
 import { getClient, getMappings, getServices, requireAdmin } from "@/lib/data";
+import { isDemo } from "@/lib/env";
+import { createClient } from "@/lib/supabase/server";
 import { addAnnotationAction, inviteUserAction, saveMappingsAction, setStatusAction, updateClientAction } from "../../actions";
 
 export const metadata: Metadata = { title: "Client settings" };
@@ -15,6 +17,23 @@ export default async function ClientSettingsPage({ params, searchParams }: PageP
   const client = await getClient(id);
   if (!client) notFound();
   const [services, mappings] = await Promise.all([getServices(id), getMappings(id)]);
+  const usesShopify = client.primary_goal === "ecommerce" || services.some((s) => s.service === "shopify" && s.enabled);
+  let shopifyConnected = false;
+  if (usesShopify) {
+    if (isDemo) shopifyConnected = true;
+    else {
+      const { data } = await (await createClient()).rpc("shopify_connected", { cid: id });
+      shopifyConnected = data === true;
+    }
+  }
+  const shopifyNotice: Record<string, string> = {
+    connected: "Shopify connected. Orders sync tonight (up to 13 months of history on the first run).",
+    missing: "Add the store domain and app client ID, save, then connect.",
+    expired: "The Shopify install took too long. Try Connect Shopify again.",
+    mismatch: "Shopify returned a different store than the one saved for this client.",
+    invalid: "Shopify's response couldn't be verified. Check the app client secret and try again.",
+    error: "Shopify didn't return an access token. Check the app's redirect URL and scopes, then try again.",
+  };
 
   return (
     <>
@@ -25,6 +44,7 @@ export default async function ClientSettingsPage({ params, searchParams }: PageP
       {sp.saved === "1" && <Notice>Saved.</Notice>}
       {sp.created === "1" && <Notice>Client created. The first data sync runs tonight.</Notice>}
       {sp.invited === "1" && <Notice>Invite sent.</Notice>}
+      {typeof sp.shopify === "string" && shopifyNotice[sp.shopify] && <Notice>{shopifyNotice[sp.shopify]}</Notice>}
 
       <div className="grid max-w-4xl gap-6">
         <form action={updateClientAction} className="card grid gap-8 p-6 sm:p-8">
@@ -32,6 +52,23 @@ export default async function ClientSettingsPage({ params, searchParams }: PageP
           <ClientFields client={client} services={services} />
           <div><button className="btn btn-coral" type="submit">Save settings</button></div>
         </form>
+
+        {usesShopify && (
+          <section id="shopify" className="card flex flex-wrap items-center justify-between gap-4 p-6 sm:p-8" aria-labelledby="shop-title">
+            <div>
+              <h2 id="shop-title" className="font-display text-lg font-bold">Shopify connection</h2>
+              <p className="mt-1 text-sm text-ink-2">
+                {shopifyConnected
+                  ? `Connected${client.shopify_shop ? ` to ${client.shopify_shop}` : ""}. Reconnect if the app's scopes change.`
+                  : client.shopify_shop ? `Not connected yet. The store owner (or a staff account with app permissions) approves the install on ${client.shopify_shop}.` : "Save the store domain and app details above first."}
+              </p>
+            </div>
+            {/* Plain link: the route redirects to Shopify's install screen. */}
+            <a className={`btn ${shopifyConnected ? "btn-ghost" : "btn-coral"}`} href={`/api/shopify/connect?client=${id}`}>
+              {shopifyConnected ? "Reconnect Shopify" : "Connect Shopify"}
+            </a>
+          </section>
+        )}
 
         <section id="mappings" className="card p-6 sm:p-8" aria-labelledby="map-title">
           <h2 id="map-title" className="font-display text-lg font-bold">Campaign → product pairing</h2>

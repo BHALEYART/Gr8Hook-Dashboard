@@ -17,6 +17,11 @@ const hits = new Map<string, number[]>();
 const cache = new Map<string, { at: number; result: AuditResult }>();
 const LIMIT = 8, WINDOW = 60 * 60 * 1000, CACHE_MS = 15 * 60 * 1000;
 
+/** Health check: open this URL in a browser to confirm the endpoint is deployed and the API key is set. */
+export function GET() {
+  return NextResponse.json({ ok: true, pagespeedKey: Boolean(process.env.PAGESPEED_API_KEY) });
+}
+
 export function OPTIONS(request: NextRequest) {
   return new NextResponse(null, { status: 204, headers: cors(request.headers.get("origin")) });
 }

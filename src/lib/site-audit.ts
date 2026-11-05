@@ -104,7 +104,7 @@ async function psi(url: string, strategy: "mobile" | "desktop"): Promise<PsiBody
   const q = new URLSearchParams({ url, strategy });
   for (const c of ["performance", "accessibility", "seo", "best-practices"]) q.append("category", c);
   if (process.env.PAGESPEED_API_KEY) q.set("key", process.env.PAGESPEED_API_KEY);
-  const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(55_000) }).catch(() => null);
+  const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(45_000) }).catch(() => null);
   if (!res || !res.ok) return null;
   const body = (await res.json().catch(() => ({}))) as PsiBody;
   return body.lighthouseResult ?? null;
@@ -265,12 +265,14 @@ export function lighthouseSummary(mobile: NonNullable<PsiBody["lighthouseResult"
 export async function runAudit(input: string): Promise<AuditResult> {
   const start = normalizeUrl(input);
   await assertPublic(start);
+  // Google's tests start right away, alongside our own page checks, so the whole audit fits in under a minute.
+  const mobileP = psi(start.toString(), "mobile"), desktopP = psi(start.toString(), "desktop");
   const page = await safeFetch(start);
   if (!page) throw new Error("We couldn't reach that website. Check the address and try again.");
   if (page.status >= 400) throw new Error(`That page returned an error (${page.status}). Check the address and try again.`);
   const finalUrl = page.url.toString();
 
-  const [mobile, desktop, sitemap] = await Promise.all([psi(finalUrl, "mobile"), psi(finalUrl, "desktop"), sitemapCheck(page.url.origin)]);
+  const [mobile, desktop, sitemap] = await Promise.all([mobileP, desktopP, sitemapCheck(page.url.origin)]);
 
   const checks: Check[] = [];
   checks.push(page.url.protocol === "https:"

@@ -100,15 +100,57 @@ export interface PsiBody {
   error?: { message?: string };
 }
 
-async function psi(url: string, strategy: "mobile" | "desktop"): Promise<PsiBody["lighthouseResult"] | null> {
+export type Strategy = "mobile" | "desktop";
+type PsiOutcome = { lh: NonNullable<PsiBody["lighthouseResult"]> } | { error: string };
+
+/** Plain-language reason when Google's test can't finish a site. */
+function psiReason(status: number, message: string): string {
+  if (/FAILED_DOCUMENT_REQUEST|ERRORED_DOCUMENT_REQUEST|DNS_FAILURE|ERR_|status code/i.test(message)) return "Google couldn't load the page. Some sites block automated tests.";
+  if (/NO_FCP|NO_LCP|NO_SPEEDLINE|PAGE_HUNG/i.test(message)) return "The page didn't finish displaying during Google's test.";
+  if (status === 429 || /quota|rate/i.test(message)) return "Google's test is busy right now. Try again in a minute.";
+  return "Google's test didn't finish. Try again in a minute.";
+}
+
+async function psi(url: string, strategy: Strategy, timeoutMs: number): Promise<PsiOutcome> {
   const q = new URLSearchParams({ url, strategy });
   for (const c of ["performance", "accessibility", "seo", "best-practices"]) q.append("category", c);
   if (process.env.PAGESPEED_API_KEY) q.set("key", process.env.PAGESPEED_API_KEY);
-  const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(45_000) }).catch(() => null);
-  if (!res || !res.ok) return null;
+  const res = await fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${q}`, { signal: AbortSignal.timeout(timeoutMs) }).catch((e: Error) => e);
+  if (res instanceof Error) return { error: res.name === "TimeoutError" ? "Google's test took too long for this site. Try again, it's often faster the second time." : "Google's test couldn't be reached. Try again in a minute." };
   const body = (await res.json().catch(() => ({}))) as PsiBody;
-  return body.lighthouseResult ?? null;
+  if (!res.ok || !body.lighthouseResult) {
+    console.error("PageSpeed failed", strategy, res.status, body.error?.message?.slice(0, 300));
+    return { error: psiReason(res.status, body.error?.message ?? "") };
+  }
+  return { lh: body.lighthouseResult };
 }
+
+export interface SpeedResult { strategy: Strategy; url: string; fetchedAt: string; scores: Scores | null; metrics: AuditResult["metrics"]; issues: AuditResult["lighthouseIssues"]; error: string | null }
+
+/** One Google Lighthouse run (mobile or desktop). Runs as its own request so each gets the full time limit. */
+export async function runSpeed(input: string, strategy: Strategy): Promise<SpeedResult> {
+  const u = normalizeUrl(input);
+  await assertPublic(u);
+  const started = Date.now();
+  let out = await psi(u.toString(), strategy, 55_000);
+  // A quick failure (not a timeout) is often temporary on Google's side: try once more if there's time.
+  if ("error" in out && Date.now() - started < 20_000 && !/took too long/.test(out.error)) out = await psi(u.toString(), strategy, 55_000 - (Date.now() - started));
+  const base = { strategy, url: u.toString(), fetchedAt: new Date().toISOString() };
+  if ("error" in out) return { ...base, scores: null, metrics: [], issues: [], error: out.error };
+  const { metrics, issues } = strategy === "mobile" ? lighthouseSummary(out.lh) : { metrics: [], issues: [] };
+  return { ...base, scores: scoresOf(out.lh), metrics, issues, error: null };
+}
+
+/** Combines the page checks with the mobile/desktop speed runs into one report. */
+export function mergeAudit(base: AuditResult, mobile: SpeedResult | null, desktop: SpeedResult | null): AuditResult {
+  const notes = [...base.notes];
+  if (!mobile?.scores) notes.unshift("Google's mobile speed test didn't finish for this site, so mobile speed scores aren't included.");
+  return {
+    ...base, mobile: mobile?.scores ?? null, desktop: desktop?.scores ?? null,
+    metrics: mobile?.metrics ?? [], lighthouseIssues: mobile?.issues ?? [], notes,
+  };
+}
+
 const pct = (s: number | null | undefined) => (typeof s === "number" ? Math.round(s * 100) : null);
 const scoresOf = (lh: NonNullable<PsiBody["lighthouseResult"]>): Scores => ({
   performance: pct(lh.categories.performance?.score), accessibility: pct(lh.categories.accessibility?.score),
@@ -262,17 +304,15 @@ export function lighthouseSummary(mobile: NonNullable<PsiBody["lighthouseResult"
   return { metrics, issues };
 }
 
+/** Page checks only (fast). Speed scores come from runSpeed, called separately. */
 export async function runAudit(input: string): Promise<AuditResult> {
   const start = normalizeUrl(input);
   await assertPublic(start);
-  // Google's tests start right away, alongside our own page checks, so the whole audit fits in under a minute.
-  const mobileP = psi(start.toString(), "mobile"), desktopP = psi(start.toString(), "desktop");
   const page = await safeFetch(start);
   if (!page) throw new Error("We couldn't reach that website. Check the address and try again.");
   if (page.status >= 400) throw new Error(`That page returned an error (${page.status}). Check the address and try again.`);
   const finalUrl = page.url.toString();
-
-  const [mobile, desktop, sitemap] = await Promise.all([mobileP, desktopP, sitemapCheck(page.url.origin)]);
+  const sitemap = await sitemapCheck(page.url.origin);
 
   const checks: Check[] = [];
   checks.push(page.url.protocol === "https:"
@@ -280,16 +320,8 @@ export async function runAudit(input: string): Promise<AuditResult> {
     : { id: "https", group: "security", status: "fail", title: "Not secure (no HTTPS)", detail: "Browsers label the site \"Not secure\", which scares visitors away and hurts search rankings." });
   checks.push(...htmlChecks(page.body), sitemap);
 
-  const notes: string[] = [];
-  const { metrics, issues } = mobile ? lighthouseSummary(mobile) : { metrics: [], issues: [] };
-  if (!mobile) {
-    notes.push("Google's speed test didn't finish for this site, so speed scores aren't shown. Try again in a minute.");
-  }
-  notes.push("Scores come from Google Lighthouse and can vary a little each time it runs.");
-
   return {
-    url: input, finalUrl, fetchedAt: new Date().toISOString(),
-    mobile: mobile ? scoresOf(mobile) : null, desktop: desktop ? scoresOf(desktop) : null,
-    metrics, lighthouseIssues: issues, checks, notes,
+    url: input, finalUrl, fetchedAt: new Date().toISOString(), mobile: null, desktop: null, metrics: [], lighthouseIssues: [], checks,
+    notes: ["Scores come from Google Lighthouse and can vary a little each time it runs."],
   };
 }

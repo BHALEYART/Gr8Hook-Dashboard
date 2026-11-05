@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { alertEmail, reportEmail } from "@/lib/audit-email";
 import { CONCERNS, recommendations, scoreLead } from "@/lib/audit-leads";
-import { verifyAudit } from "@/lib/audit-sign";
+import { verifyAudit, verifySpeed } from "@/lib/audit-sign";
+import { mergeAudit } from "@/lib/site-audit";
 import { emailConfigured, sendEmail } from "@/lib/email";
 import { allowOrigin, clientIp, cors, rateLimited } from "@/lib/public-api";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -35,7 +36,11 @@ export async function POST(request: NextRequest) {
   if (!lead.name || !lead.business || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(lead.email) || !CONCERNS.some((c) => c.key === lead.concern)) {
     return NextResponse.json({ error: "Please fill in your name, business, a valid email and your biggest concern." }, { status: 400, headers });
   }
-  const audit = verifyAudit(b.signed, b.sig);
+  const base = verifyAudit(b.signed, b.sig);
+  const speed = (b.speed && typeof b.speed === "object" ? b.speed : {}) as Record<string, unknown>;
+  const hostOf = (u: string) => { try { return new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ""); } catch { return ""; } };
+  const sameSite = (r: ReturnType<typeof verifySpeed>) => (r && base && hostOf(r.url) === hostOf(base.url) ? r : null);
+  const audit = base ? mergeAudit(base, sameSite(verifySpeed(speed.mobile)), sameSite(verifySpeed(speed.desktop))) : null;
   if (!audit) return NextResponse.json({ error: "Your results have expired. Please run the audit again.", fallback: true }, { status: 400, headers });
 
   const recs = recommendations(audit);

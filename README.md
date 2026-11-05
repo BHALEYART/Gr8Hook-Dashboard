@@ -94,6 +94,14 @@ Admins (client settings → **Ad account connections**) and client owners (accou
 4. Until the app has **Advanced Access** to `ads_read` (Business Verification + App Review), only people with a role on the Meta app can connect. Add yourself and testers under App roles in the meantime.
 5. Regular user tokens last about 60 days. The settings card shows when it renews and turns red two weeks before; reconnecting renews it.
 
+## Free website audit endpoint
+
+`POST /api/site-audit` powers the free audit at gr8hook.com/audit. It runs Google PageSpeed Insights (mobile and desktop) and checks the page's public HTML: title, description, H1, viewport, social preview, structured data, sitemap, click-to-call, booking links, lead forms, Google tag and Meta Pixel.
+
+- Set `PAGESPEED_API_KEY` in Vercel (a Google Cloud API key restricted to the PageSpeed Insights API).
+- Only gr8hook.com may call it (CORS), private/internal addresses are refused, and each instance allows 8 audits per IP per hour with a 15-minute cache.
+- Leads from the audit page go to Admin@gr8hook.com through FormSubmit, not through this app.
+
 ## Next steps
 
 - [ ] gclid/fbclid fallback matching when `utm_campaign` is missing

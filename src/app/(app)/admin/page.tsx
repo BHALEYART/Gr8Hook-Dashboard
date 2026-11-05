@@ -16,6 +16,7 @@ export default async function AdminPage() {
   return (
     <>
       <PageHeader eyebrow="Admin" title="Clients">
+        <Link className="btn btn-ghost" href="/admin/leads">Audit leads</Link>
         <Link className="btn btn-coral" href="/admin/clients/new">Add client</Link>
       </PageHeader>
       {clients.length === 0 ? (

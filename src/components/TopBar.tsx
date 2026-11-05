@@ -156,6 +156,7 @@ export function TopBar({ email, isAdmin, clients, isDemo }: Props) {
                   <div className="border-b border-line py-1">
                     <Link role="menuitem" href="/admin" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center px-4 text-sm hover:bg-panel-2">All clients</Link>
                     <Link role="menuitem" href="/admin/clients/new" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center px-4 text-sm hover:bg-panel-2">Add client</Link>
+                    <Link role="menuitem" href="/admin/leads" onClick={() => setMenuOpen(false)} className="flex min-h-11 items-center px-4 text-sm hover:bg-panel-2">Audit leads</Link>
                   </div>
                 )}
                 <div className="border-b border-line py-1">

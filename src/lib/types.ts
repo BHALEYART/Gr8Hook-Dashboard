@@ -184,3 +184,33 @@ export interface StoreMonth {
   google_orders: number;
   google_revenue: number;
 }
+
+export interface LeadScores { performance: number | null; accessibility: number | null; seo: number | null; bestPractices: number | null }
+export type LeadTier = "hot" | "warm" | "cool";
+export type LeadStatus = "new" | "contacted" | "qualified" | "won" | "lost";
+export interface AuditLead {
+  id: string;
+  created_at: string;
+  status: LeadStatus;
+  name: string;
+  business: string;
+  email: string;
+  phone: string | null;
+  concern: string;
+  concern_detail: string | null;
+  website: string;
+  audited_at: string;
+  scores: { mobile: LeadScores | null; desktop: LeadScores | null };
+  issues: { title: string; detail?: string; status: string; group: string }[];
+  recommendations: { title: string; why: string; fix: string; service: string; priority: string }[];
+  lead_score: number;
+  lead_tier: LeadTier;
+  suggested_services: string[];
+  score_reasons: string[];
+  notes: string | null;
+  source: string;
+  referrer: string | null;
+  utm: Record<string, string>;
+  consent_marketing: boolean;
+  report_emailed_at: string | null;
+}

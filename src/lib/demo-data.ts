@@ -303,3 +303,51 @@ export function demoStore(clientId: string) {
   storeCache.set(clientId, out);
   return out;
 }
+
+// ───────────── Demo leads from the free website audit ─────────────
+import { recommendations as auditRecs, scoreLead as auditScore } from "@/lib/audit-leads";
+import type { AuditResult, Check } from "@/lib/site-audit";
+import type { AuditLead } from "@/lib/types";
+
+let demoLeadsCache: AuditLead[] | null = null;
+export function demoAuditLeads(): AuditLead[] {
+  if (demoLeadsCache) return demoLeadsCache;
+  const ck = (id: string, group: Check["group"], status: Check["status"], title: string, detail = ""): Check => ({ id, group, status, title, detail });
+  const base = (pass: string[]): Check[] => [
+    ck("https", "security", "pass", "HTTPS enabled"), ck("title", "seo", pass.includes("title") ? "pass" : "warn", pass.includes("title") ? "Page title found" : "Page title could be stronger"),
+    ck("description", "seo", pass.includes("description") ? "pass" : "warn", pass.includes("description") ? "Page description found" : "Missing page description"),
+    ck("call", "conversion", pass.includes("call") ? "pass" : "warn", pass.includes("call") ? "Click-to-call link found" : "No click-to-call link found"),
+    ck("form", "conversion", pass.includes("form") ? "pass" : "warn", pass.includes("form") ? "Contact or lead form found" : "No lead form detected on this page"),
+    ck("ga", "tracking", pass.includes("ga") ? "pass" : "warn", pass.includes("ga") ? "Google tag detected" : "No Google tag detected"),
+    ck("pixel", "tracking", pass.includes("pixel") ? "pass" : "info", pass.includes("pixel") ? "Meta Pixel detected" : "No Meta Pixel detected"),
+  ];
+  const rows: [string, string, string, string, string | null, string, number, string[], number][] = [
+    ["Maria Lopez", "Lopez Family Dental", "maria@lopezfamilydental.com", "https://lopezfamilydental.com/", "(616) 555-0142", "ads_roi", 34, ["title", "call", "form"], 2],
+    ["Derek Shaw", "Shaw Roofing & Gutters", "derek@shawroofing.co", "https://shawroofing.co/", "(248) 555-0187", "follow_up", 58, ["title", "description", "ga"], 6],
+    ["Tanya Brooks", "Glow Studio Spa", "glowstudiospa@gmail.com", "https://glowstudiospa.com/", null, "unknown_results", 71, ["title", "description", "call", "form"], 26],
+    ["Sam Patel", "Patel Accounting", "sam@patelcpa.com", "https://patelcpa.com/", null, "google", 92, ["title", "description", "call", "form", "ga", "pixel"], 50],
+  ];
+  demoLeadsCache = rows.map(([name, business, email, website, phone, concern, perf, pass, hoursAgo], i) => {
+    const audit: AuditResult = {
+      url: website, finalUrl: website, fetchedAt: new Date(Date.now() - hoursAgo * 36e5).toISOString(),
+      mobile: { performance: perf, accessibility: 84, seo: pass.includes("description") ? 92 : 75, bestPractices: 96 },
+      desktop: { performance: Math.min(99, perf + 25), accessibility: 84, seo: pass.includes("description") ? 92 : 75, bestPractices: 96 },
+      metrics: [{ label: "Main content loads (mobile)", value: `${(9 - perf / 14).toFixed(1)} s`, status: perf >= 90 ? "pass" : perf >= 50 ? "warn" : "fail" }],
+      lighthouseIssues: perf < 90 ? [{ title: "Images are larger than they need to be", category: "Speed", status: perf < 50 ? "fail" : "warn" }] : [],
+      checks: base(pass), notes: [],
+    };
+    const recs = auditRecs(audit);
+    const s = auditScore(audit, { email, phone, concern });
+    return {
+      id: `demo-lead-${i + 1}`, created_at: audit.fetchedAt, status: i === 3 ? "contacted" : "new", name, business, email, phone, concern,
+      concern_detail: i === 1 ? "We get calls from the ads but nobody has time to follow up quickly." : null,
+      website, audited_at: audit.fetchedAt, scores: { mobile: audit.mobile, desktop: audit.desktop },
+      issues: [...audit.checks.filter((c) => c.status === "warn" || c.status === "fail").map(({ title, detail, status, group }) => ({ title, detail, status, group })),
+        ...audit.lighthouseIssues.map((x) => ({ title: x.title, status: x.status, group: x.category }))],
+      recommendations: recs, lead_score: s.score, lead_tier: s.tier, suggested_services: s.services, score_reasons: s.reasons, notes: null,
+      source: "website-audit", referrer: i === 0 ? "https://www.facebook.com/" : null, utm: (i === 0 ? { utm_source: "facebook", utm_campaign: "free-audit" } : {}) as Record<string, string>,
+      consent_marketing: i !== 2, report_emailed_at: audit.fetchedAt,
+    } satisfies AuditLead;
+  });
+  return demoLeadsCache;
+}

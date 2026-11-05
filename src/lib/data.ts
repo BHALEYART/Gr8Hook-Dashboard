@@ -3,10 +3,10 @@
 import { redirect } from "next/navigation";
 import { isDemo } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
-import { DEMO_CLIENTS, DEMO_SERVICES, demoBundle, demoStore } from "@/lib/demo-data";
+import { DEMO_CLIENTS, DEMO_SERVICES, demoAuditLeads, demoBundle, demoStore } from "@/lib/demo-data";
 import { buildStoreData } from "@/lib/store";
 import { campaignRows, lastMonths, monthKey, rollupMonthly, type DashboardInput } from "@/lib/metrics";
-import type { AdMetricDaily, Annotation, CampaignMapping, CampaignRow, Client, ClientService, Lead, StoreOrder, StoreOrderLine, Viewer } from "@/lib/types";
+import type { AuditLead, AdMetricDaily, Annotation, CampaignMapping, CampaignRow, Client, ClientService, Lead, StoreOrder, StoreOrderLine, Viewer } from "@/lib/types";
 
 export async function getViewer(): Promise<Viewer> {
   if (isDemo) return { userId: "demo", email: "demo@gr8hook.com", isAdmin: true, clientIds: DEMO_CLIENTS.map((c) => c.id) };
@@ -222,4 +222,21 @@ export async function getMappings(clientId: string) {
   for (const m of input.metrics) campaigns.set(m.campaign_id, { id: m.campaign_id, name: m.campaign_name, platform: m.platform });
   const mapped = new Map(input.mappings.map((m) => [m.campaign_id, m.product_or_service]));
   return [...campaigns.values()].map((c) => ({ ...c, service: mapped.get(c.id) ?? "" }));
+}
+
+/** Leads from the free website audit (admins only; RLS enforces it too). */
+export async function getAuditLeads(): Promise<AuditLead[]> {
+  if (isDemo) return demoAuditLeads();
+  const supabase = await createClient();
+  const { data } = await supabase.from("audit_leads")
+    .select("id, created_at, status, name, business, email, phone, concern, concern_detail, website, audited_at, scores, issues, recommendations, lead_score, lead_tier, suggested_services, score_reasons, notes, source, referrer, utm, consent_marketing, report_emailed_at")
+    .order("created_at", { ascending: false }).limit(500);
+  return (data ?? []) as AuditLead[];
+}
+
+export async function getAuditLead(id: string): Promise<AuditLead | null> {
+  if (isDemo) return demoAuditLeads().find((l) => l.id === id) ?? null;
+  const supabase = await createClient();
+  const { data } = await supabase.from("audit_leads").select("*").eq("id", id).maybeSingle();
+  return (data as AuditLead) ?? null;
 }

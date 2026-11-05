@@ -35,7 +35,7 @@ Every data table has a `client_id`. Postgres Row Level Security only returns row
 
 ## Go live
 
-1. **Supabase:** create a project, then run `supabase/migrations/0001_init.sql`, `0002_reach_and_labels.sql`, `0003_shopify.sql` and `0004_ad_connections.sql` (in that order) in the SQL editor.
+1. **Supabase:** create a project, then run `supabase/migrations/0001_init.sql`, `0002_reach_and_labels.sql`, `0003_shopify.sql`, `0004_ad_connections.sql` and `0005_audit_leads.sql` (in that order) in the SQL editor.
 2. **Make yourself admin:** sign up once through the app (or add your user under Authentication), then run
    `update public.profiles set is_admin = true where email = 'you@example.com';`
 3. **Auth settings:** in Supabase → Authentication → URL configuration, set the Site URL to your app URL and add `https://YOUR-APP/auth/callback` as a redirect URL. Turn off public sign-ups (invite-only).
@@ -100,7 +100,10 @@ Admins (client settings → **Ad account connections**) and client owners (accou
 
 - Set `PAGESPEED_API_KEY` in Vercel (a Google Cloud API key restricted to the PageSpeed Insights API).
 - Only gr8hook.com may call it (CORS), private/internal addresses are refused, and each instance allows 8 audits per IP per hour with a 15-minute cache.
-- Leads from the audit page go to Admin@gr8hook.com through FormSubmit, not through this app.
+- `POST /api/audit-lead` handles "Get my full report": it saves the lead to `audit_leads` (needs Supabase), emails the owner a branded report with recommendations (needs `RESEND_API_KEY`), scores the lead and emails you an alert for hot leads (every lead if the database isn't set up, or with `AUDIT_NOTIFY_ALL=true`).
+- If neither the database nor email is set up, the audit page falls back to FormSubmit so no lead is lost.
+- Leads appear in **Admin → Audit leads** with their findings, score, suggested service, status and notes.
+- Email setup: in Resend, add the domain `gr8hook.com`, add the DNS records it shows at GoDaddy (they don't affect your Microsoft 365 mail), then set `RESEND_API_KEY` in Vercel.
 
 ## Next steps
 

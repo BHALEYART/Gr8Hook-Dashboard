@@ -35,9 +35,9 @@ Every data table has a `client_id`. Postgres Row Level Security only returns row
 
 ## Go live
 
-1. **Supabase:** create a project, then run `supabase/migrations/0001_init.sql`, `0002_reach_and_labels.sql`, `0003_shopify.sql`, `0004_ad_connections.sql` and `0005_audit_leads.sql` (in that order) in the SQL editor.
+1. **Supabase:** create a project, then paste `supabase/setup_all.sql` into the SQL editor and run it (it's the migrations below combined). Or run `supabase/migrations/0001_init.sql`, `0002_reach_and_labels.sql`, `0003_shopify.sql`, `0004_ad_connections.sql` and `0005_audit_leads.sql` (in that order) in the SQL editor.
 2. **Make yourself admin:** sign up once through the app (or add your user under Authentication), then run
-   `update public.profiles set is_admin = true where email = 'you@example.com';`
+   `update public.profiles set is_admin = true where lower(email) = 'you@example.com';`
 3. **Auth settings:** in Supabase → Authentication → URL configuration, set the Site URL to your app URL and add `https://YOUR-APP/auth/callback` as a redirect URL. Turn off public sign-ups (invite-only).
 4. **Vercel:** import this repo, add the variables from `.env.example`, and deploy. Point a subdomain like `app.gr8hook.com` at it and set `NEXT_PUBLIC_SITE_URL`.
 5. **APIs:** fill in the Google Ads, Meta and GHL variables as each approval comes through. Check the API versions in `google-ads.ts`, `meta-ads.ts` and `gohighlevel.ts` against the current docs.

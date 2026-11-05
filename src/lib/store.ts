@@ -116,8 +116,9 @@ export function buildStoreData(months: string[], current: string[], metrics: AdM
   const campaigns: StoreData["campaigns"] = Object.fromEntries(months.map((m) => [m, [] as StoreCampaignMonth[]]));
   for (const [k, row] of camp) campaigns[k.split("|")[0]].push(row);
 
+  const nowIso = new Date().toISOString(); // demo data runs to month end; lists only show what has "happened"
   const recent = live
-    .filter((o) => currentSet.has(monthKey(o.created_at)))
+    .filter((o) => currentSet.has(monthKey(o.created_at)) && o.created_at <= nowIso)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, 25)
     .map((o) => ({

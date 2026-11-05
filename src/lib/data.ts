@@ -169,7 +169,9 @@ export async function getRecentLeads(clientId: string, limit = 50) {
   for (const m of input.metrics) names.set(m.campaign_id, m.campaign_name);
   const won = new Map(input.opportunities.filter((o) => o.status === "won").map((o) => [o.contact_id, o]));
   const appt = new Map(input.appointments.map((a) => [a.contact_id, a]));
+  const now = new Date().toISOString();
   return [...input.leads]
+    .filter((l) => l.created_at <= now) // demo data runs to the end of the month
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .slice(0, limit)
     .map((l) => ({
@@ -186,7 +188,8 @@ export async function getRecentOrders(clientId: string, limit = 50) {
   let orders: StoreOrder[], lines: StoreOrderLine[], names = new Map<string, string>();
   if (isDemo) {
     const st = demoStore(clientId);
-    orders = [...st.orders].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+    const now = new Date().toISOString();
+    orders = st.orders.filter((o) => o.created_at <= now).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
     const ids = new Set(orders.map((o) => o.order_id));
     lines = st.lines.filter((l) => ids.has(l.order_id));
     for (const m of st.metrics) names.set(m.campaign_id, m.campaign_name);

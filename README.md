@@ -105,6 +105,10 @@ Admins (client settings → **Ad account connections**) and client owners (accou
 - Leads appear in **Admin → Audit leads** with their findings, score, suggested service, status and notes.
 - Email setup: in Resend, add the domain `gr8hook.com`, add the DNS records it shows at GoDaddy (they don't affect your Microsoft 365 mail), then set `RESEND_API_KEY` in Vercel.
 
+## Demo site (demo.gr8hook.com)
+
+A second Vercel project from this same repo, with **no Supabase variables**, runs in demo mode with sample clients. Demo data is generated through the end of the current month, so the latest month always looks complete (lists only show items dated up to today).
+
 ## Next steps
 
 - [ ] gclid/fbclid fallback matching when `utm_campaign` is missing

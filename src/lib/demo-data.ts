@@ -121,14 +121,15 @@ export function demoBundle(clientId: string): DemoBundle {
   const leads: Lead[] = [];
   const opportunities: Opportunity[] = [];
   const appointments: Appointment[] = [];
-  const today = new Date();
+  const today = demoEnd();
   const DAYS = 760; // two years, so a 12-month view has a full prior period to compare against
   let n = 0;
 
   for (let d = DAYS; d >= 0; d--) {
     const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - d));
     const iso = date.toISOString().slice(0, 10);
-    const ramp = 0.7 + 0.6 * ((DAYS - d) / DAYS); // spend and efficiency improve over time
+    // Spend and efficiency improve over time, with a stronger finish so recent months look like a client who's winning.
+    const ramp = (0.7 + 0.6 * ((DAYS - d) / DAYS)) * (d < 31 ? 1.35 : d < 75 ? 1.2 : 1);
     for (const c of camps) {
       const spend = c.daily * (0.85 + r() * 0.3) * (0.9 + 0.2 * ((DAYS - d) / DAYS));
       const clicks = Math.max(0, Math.round((spend / c.cpc) * (0.85 + r() * 0.3)));
@@ -212,6 +213,12 @@ const STORE_NOTES: Record<string, [number, string][]> = {
 const storeCache = new Map<string, { metrics: AdMetricDaily[]; orders: StoreOrder[]; lines: StoreOrderLine[]; mappings: CampaignMapping[]; annotations: Annotation[] }>();
 
 /** Sample Shopify orders, their ad sources, and the platform-reported (Pixel / Google tag) purchases. */
+/** Demo data runs through the last day of the current month, so the latest month reads as a full month in previews. */
+function demoEnd() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+}
+
 export function demoStore(clientId: string) {
   const hit = storeCache.get(clientId);
   if (hit) return hit;
@@ -220,7 +227,7 @@ export function demoStore(clientId: string) {
   const metrics: AdMetricDaily[] = [];
   const orders: StoreOrder[] = [];
   const lines: StoreOrderLine[] = [];
-  const today = new Date();
+  const today = demoEnd();
   const DAYS = 760; // two years, so a 12-month view has a full prior period to compare against
   let num = 1000, lineNo = 0;
 
@@ -260,7 +267,7 @@ export function demoStore(clientId: string) {
     const iso = date.toISOString().slice(0, 10);
     const month = date.getUTCMonth();
     const season = month === 10 ? 1.45 : month === 11 ? 1.8 : month === 0 ? 0.8 : month >= 5 && month <= 7 ? 0.85 : 1;
-    const ramp = 0.75 + 0.5 * ((DAYS - d) / DAYS);
+    const ramp = (0.65 + 0.7 * ((DAYS - d) / DAYS)) * (d < 75 ? 1.15 : 1);
     for (const c of camps) {
       const spend = c.daily * (0.85 + r() * 0.3) * (season > 1 ? 1 + (season - 1) * 0.6 : 1);
       const clicks = Math.max(0, Math.round((spend / c.cpc) * (0.85 + r() * 0.3)));

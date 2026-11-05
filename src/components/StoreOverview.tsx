@@ -6,6 +6,7 @@ import { Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, Responsiv
 import { Ring } from "@/components/Overview";
 import { Sparkline } from "@/components/TrendChart";
 import { Delta } from "@/components/ui";
+import { isDemo } from "@/lib/env";
 import { money, num } from "@/lib/metrics";
 import { usePrefs } from "@/lib/prefs";
 import { ALL, blankStoreMonth, type StoreData } from "@/lib/store";
@@ -14,7 +15,8 @@ import type { Annotation, StoreMonth } from "@/lib/types";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const monthIdx = (m: string) => Number(m.slice(5)) - 1;
-const thisMonth = () => new Date().toISOString().slice(0, 7);
+// Demo data covers the whole current month, so it isn't marked as month to date.
+const thisMonth = () => (isDemo ? "" : new Date().toISOString().slice(0, 7));
 const mtd = (m: string) => (m === thisMonth() ? " (MTD)" : "");
 const fullName = (m: string) => `${FULL[monthIdx(m)]} ${m.slice(0, 4)}${mtd(m)}`;
 const shortName = (m: string) => `${MONTHS[monthIdx(m)]} ${m.slice(0, 4)}${mtd(m)}`;
@@ -265,7 +267,7 @@ export function StoreOverview({ client, monthsBack, current, previous, months, p
           <div className="trend-chart flex-auto">
             <StoreChart data={chartData} showSpend={isAll} onPick={pick} tickLabel={tickLabel} />
           </div>
-          <p className="mt-3 text-xs text-ink-3">Click a month to view it, then another to compare. * Month to date.</p>
+          <p className="mt-3 text-xs text-ink-3">Click a month to view it, then another to compare.{isDemo ? "" : " * Month to date."}</p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Pick a month to view, then another to compare">
             {chartMonths.map((m) => (
               <button key={m} type="button" onClick={() => pick(m)} aria-pressed={picked.has(m)}

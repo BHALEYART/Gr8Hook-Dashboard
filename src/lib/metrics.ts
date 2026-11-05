@@ -1,3 +1,4 @@
+import { isDemo } from "@/lib/env";
 import type { AdMetricDaily, Appointment, CampaignMapping, CampaignRow, Lead, MonthRow, Opportunity } from "@/lib/types";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -72,7 +73,7 @@ export function rollupMonthly(input: DashboardInput, months: string[]): MonthRow
     const row = rows.get(monthKey(a.starts_at));
     if (row) row.appointments += 1;
   }
-  const current = monthKey(new Date());
+  const current = isDemo ? "" : monthKey(new Date()); // demo data covers the whole current month
   return months.map((m) => {
     const r = rows.get(m)!;
     // The current month is partial; label it so a lower bar doesn't read as a drop.

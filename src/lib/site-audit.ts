@@ -108,6 +108,8 @@ function psiReason(status: number, message: string): string {
   if (/FAILED_DOCUMENT_REQUEST|ERRORED_DOCUMENT_REQUEST|DNS_FAILURE|ERR_|status code/i.test(message)) return "Google couldn't load the page. Some sites block automated tests.";
   if (/NO_FCP|NO_LCP|NO_SPEEDLINE|PAGE_HUNG/i.test(message)) return "The page didn't finish displaying during Google's test.";
   if (status === 429 || /quota|rate/i.test(message)) return "Google's test is busy right now. Try again in a minute.";
+  // Lighthouse's generic crash: most often a very heavy page that overwhelms the slowed-down phone Google simulates.
+  if (/something went wrong/i.test(message)) return "Google's test couldn't finish this page. This usually happens with very heavy pages, especially on the mobile test.";
   return "Google's test didn't finish. Try again in a minute.";
 }
 
@@ -175,8 +177,10 @@ export async function runSpeed(input: string, strategy: Strategy): Promise<Speed
   const started = Date.now();
   const left = () => SPEED_BUDGET_MS - (Date.now() - started);
   let out = await psi(u.toString(), strategy, 150_000);
-  // A quick failure (not a timeout) is often temporary on Google's side: try once more while there's time.
-  if ("error" in out && left() > 90_000 && !/took too long/.test(out.error)) out = await psi(u.toString(), strategy, left() - 15_000);
+  // Quick failures (not timeouts) are often temporary on Google's side: retry up to twice while there's time.
+  for (let attempt = 0; attempt < 2 && "error" in out && left() > 90_000 && !/took too long|couldn't load/.test(out.error); attempt++) {
+    out = await psi(u.toString(), strategy, left() - 15_000);
+  }
   const base = { strategy, url: u.toString(), fetchedAt: new Date().toISOString() };
   if (!("error" in out)) {
     const { metrics, issues } = lighthouseSummary(out.lh, strategy);

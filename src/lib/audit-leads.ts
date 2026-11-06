@@ -56,6 +56,10 @@ export function recommendations(audit: AuditResult): Recommendation[] {
   }
   const a11y = audit.lighthouseIssues.filter((i) => i.category === "Accessibility").map((i) => i.title);
   if (a11y.length) recs.push({ title: "Fix accessibility issues", why: "Every visitor should be able to use your site, and accessible sites tend to rank and convert better.", fix: `Start with: ${a11y.slice(0, 3).join("; ")}.`, service: "web", priority: "medium" });
+  const bp = audit.lighthouseIssues.filter((i) => i.category === "Best practices").map((i) => i.title);
+  if (bp.length) recs.push({ title: "Fix behind-the-scenes problems", why: "Browser errors and outdated features can break parts of the site and hurt trust and rankings.", fix: `Start with: ${bp.slice(0, 3).join("; ")}.`, service: "web", priority: "medium" });
+  const seo = audit.lighthouseIssues.filter((i) => i.category === "SEO").map((i) => i.title);
+  if (seo.length) recs.push({ title: "Clean up search engine issues", why: "Small technical problems make it harder for Google to understand and rank your pages.", fix: `Start with: ${seo.slice(0, 3).join("; ")}.`, service: "web", priority: "medium" });
   for (const c of audit.checks) {
     const r = REC[c.id];
     if (!r) continue;

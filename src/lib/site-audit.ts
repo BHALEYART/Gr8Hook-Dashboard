@@ -179,7 +179,7 @@ export async function runSpeed(input: string, strategy: Strategy): Promise<Speed
   if ("error" in out && left() > 90_000 && !/took too long/.test(out.error)) out = await psi(u.toString(), strategy, left() - 15_000);
   const base = { strategy, url: u.toString(), fetchedAt: new Date().toISOString() };
   if (!("error" in out)) {
-    const { metrics, issues } = strategy === "mobile" ? lighthouseSummary(out.lh) : { metrics: [], issues: [] };
+    const { metrics, issues } = lighthouseSummary(out.lh, strategy);
     return { ...base, source: "lab", scores: scoresOf(out.lh), metrics, issues, error: null };
   }
   const field = await cruxSpeed(u, strategy, left());
@@ -194,9 +194,10 @@ export function mergeAudit(base: AuditResult, mobile: SpeedResult | null, deskto
   else if (!mobile?.scores) notes.unshift("Google's mobile speed test didn't finish for this site, so mobile speed scores aren't included.");
   return {
     ...base, mobile: mobile?.scores ?? null, desktop: desktop?.scores ?? null,
-    // Mobile measurements (lab or real-visitor); desktop real-visitor numbers only if mobile has none.
-    metrics: mobile?.metrics.length ? mobile.metrics : desktop?.source === "field" ? desktop.metrics : [],
-    lighthouseIssues: mobile?.issues ?? [], notes,
+    // Mobile measurements (lab or real-visitor), or desktop ones if mobile has none.
+    metrics: mobile?.metrics.length ? mobile.metrics : desktop?.metrics ?? [],
+    // Findings from Google's mobile test, or the desktop test if mobile didn't run.
+    lighthouseIssues: mobile?.issues.length ? mobile.issues : desktop?.issues ?? [], notes,
   };
 }
 
@@ -322,34 +323,63 @@ const SPEED_PLAIN: Record<string, string> = {
   "dom-size": "The page structure is very large", "dom-size-insight": "The page structure is very large",
   "layout-shifts": "Content jumps around while loading", "cls-culprits-insight": "Content jumps around while loading",
 };
-const SKIP = new Set(["errors-in-console", "inspector-issues", "valid-source-maps", "network-dependency-tree-insight", "interactive", "max-potential-fid"]);
+// Plain-language titles for common accessibility, SEO and best-practice findings (others use Google's own title).
+const PLAIN: Record<string, string> = {
+  "color-contrast": "Some text is hard to read (low contrast)", "image-alt": "Images are missing descriptions for screen readers",
+  "link-name": "Some links don't say where they go", "button-name": "Some buttons have no label for screen readers",
+  label: "Form fields are missing labels", "heading-order": "Headings skip levels", "html-has-lang": "The page doesn't declare its language",
+  "meta-viewport": "Zooming is blocked on phones", "target-size": "Buttons or links are too small or close to tap easily",
+  "link-in-text-block": "Links blend into the text around them", "frame-title": "Embedded content has no title",
+  "aria-allowed-attr": "Screen-reader labels have errors", "aria-required-attr": "Screen-reader labels have errors", "aria-valid-attr-value": "Screen-reader labels have errors",
+  "aria-hidden-focus": "Hidden elements can still be focused", "document-title": "Missing page title", "list": "Lists aren't marked up correctly", "listitem": "Lists aren't marked up correctly",
+  "link-text": "Links use vague text like \"click here\"", "crawlable-anchors": "Some links can't be followed by search engines",
+  "is-crawlable": "Search engines are blocked from this page", "robots-txt": "The robots.txt file has errors", canonical: "The canonical link points to the wrong place",
+  "http-status-code": "The page returns an error status", hreflang: "Language versions are set up incorrectly",
+  "errors-in-console": "The page logs errors in the browser (something may be broken)", "inspector-issues": "The browser flagged problems on the page",
+  "third-party-cookies": "Uses third-party cookies that browsers are phasing out", deprecations: "Uses outdated browser features",
+  "image-aspect-ratio": "Some images are stretched or squished", "image-size-responsive": "Some images look blurry on sharp screens",
+  "redirects-http": "Visitors on http:// aren't sent to the secure site", "geolocation-on-start": "Asks for your location as soon as the page loads",
+  "notification-on-start": "Asks to send notifications as soon as the page loads", "paste-preventing-inputs": "Blocks pasting into form fields",
+  doctype: "The page is missing a doctype", charset: "The page doesn't declare its character set",
+};
+const SKIP = new Set(["valid-source-maps", "network-dependency-tree-insight", "interactive", "max-potential-fid"]);
+// Speed metrics that drive the Performance score, phrased for owners.
+const METRIC_PLAIN: Record<string, (v: string) => string> = {
+  "largest-contentful-paint": (v) => `The main content takes ${v} to load`,
+  "first-contentful-paint": (v) => `It takes ${v} before anything appears`,
+  "total-blocking-time": (v) => `The page freezes for ${v} while loading`,
+  "cumulative-layout-shift": (v) => `Content jumps around while loading (${v})`,
+  "speed-index": (v) => `The page fills in slowly (${v})`,
+};
 
-/** Speed metrics and the most impactful failing audits from a mobile Lighthouse run. */
-export function lighthouseSummary(mobile: NonNullable<PsiBody["lighthouseResult"]>) {
+/** Speed metrics and the findings behind each score: up to 4 per category, worst-scoring category first. */
+export function lighthouseSummary(lh: NonNullable<PsiBody["lighthouseResult"]>, strategy: Strategy = "mobile") {
   const metrics: AuditResult["metrics"] = [];
-  const issues: AuditResult["lighthouseIssues"] = [];
-  for (const [id, label] of [["largest-contentful-paint", "Main content loads (mobile)"], ["first-contentful-paint", "First content appears (mobile)"],
+  for (const [id, label] of [["largest-contentful-paint", `Main content loads (${strategy})`], ["first-contentful-paint", `First content appears (${strategy})`],
     ["total-blocking-time", "Time page is unresponsive"], ["cumulative-layout-shift", "Layout shifting"]] as const) {
-    const a = mobile.audits[id];
+    const a = lh.audits[id];
     if (a?.displayValue) metrics.push({ label, value: a.displayValue.replace(/\u00a0/g, " "), status: metricStatus(a.score) });
   }
-  // Most impactful failing Lighthouse audits (by category weight), skipping ones our own checks already explain.
   const seen = new Set<string>();
-  const ranked: { title: string; category: string; status: Status; weight: number }[] = [];
+  const perCategory: { score: number; items: AuditResult["lighthouseIssues"] }[] = [];
   for (const [cat, label] of Object.entries(ISSUE_CATEGORIES)) {
-    for (const ref of mobile.categories[cat]?.auditRefs ?? []) {
-      const a = mobile.audits[ref.id];
-      if (!a || seen.has(a.id) || COVERED.has(a.id) || a.score === null || a.score >= 0.9) continue;
+    const ranked: { title: string; status: Status; weight: number }[] = [];
+    for (const ref of lh.categories[cat]?.auditRefs ?? []) {
+      const a = lh.audits[ref.id];
+      if (!a || COVERED.has(a.id) || SKIP.has(a.id) || a.score === null || a.score >= 0.9) continue;
       if (!["binary", "numeric", "metricSavings"].includes(a.scoreDisplayMode)) continue;
-      if (ref.group === "metrics") continue; // speed metrics are shown above
-      if (SKIP.has(a.id) || (cat === "performance" && !SPEED_PLAIN[a.id])) continue;
-      const title = cat === "performance" ? SPEED_PLAIN[a.id] : a.title.replace(/`/g, "");
-      if (seen.has(title)) continue;
-      seen.add(a.id); seen.add(title);
-      ranked.push({ title, category: label, status: a.score < 0.5 ? "fail" : "warn", weight: ref.weight + (cat === "performance" ? 0.5 : 0) });
+      let title: string | undefined;
+      if (ref.group === "metrics") title = METRIC_PLAIN[a.id]?.((a.displayValue ?? "").replace(/\u00a0/g, " "));
+      else if (cat === "performance") title = SPEED_PLAIN[a.id];
+      else title = PLAIN[a.id] ?? a.title.replace(/`/g, "").replace(/\.$/, "");
+      if (!title || seen.has(title)) continue;
+      seen.add(title);
+      ranked.push({ title, status: a.score < 0.5 ? "fail" : "warn", weight: ref.weight + (ref.group === "metrics" ? 10 : 0) });
     }
+    ranked.sort((x, y) => y.weight - x.weight);
+    perCategory.push({ score: lh.categories[cat]?.score ?? 1, items: ranked.slice(0, 4).map(({ title, status }) => ({ title, category: label, status })) });
   }
-  issues.push(...ranked.sort((x, y) => y.weight - x.weight).slice(0, 8).map(({ title, category, status }) => ({ title, category, status })));
+  const issues = perCategory.sort((a, b) => a.score - b.score).flatMap((c) => c.items);
   return { metrics, issues };
 }
 

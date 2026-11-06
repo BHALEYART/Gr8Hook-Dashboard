@@ -125,29 +125,78 @@ async function psi(url: string, strategy: Strategy, timeoutMs: number): Promise<
   return { lh: body.lighthouseResult };
 }
 
-export interface SpeedResult { strategy: Strategy; url: string; fetchedAt: string; scores: Scores | null; metrics: AuditResult["metrics"]; issues: AuditResult["lighthouseIssues"]; error: string | null }
+export interface SpeedResult {
+  strategy: Strategy; url: string; fetchedAt: string;
+  /** "lab" = Google Lighthouse test; "field" = real Chrome visitors (Chrome UX Report), used when the lab test can't run. */
+  source: "lab" | "field";
+  scores: Scores | null; metrics: AuditResult["metrics"]; issues: AuditResult["lighthouseIssues"]; error: string | null;
+}
 
-/** One Google Lighthouse run (mobile or desktop). Runs as its own request so each gets the full time limit. */
+// ───────────── Real-visitor fallback (Chrome UX Report) ─────────────
+// Sites that block automated tests (bot protection) can't be Lighthouse-tested, but if they get enough
+// Chrome traffic, Google publishes their real visitors' speed. Needs the "Chrome UX Report API" enabled on the same key.
+const FIELD = [
+  ["largest_contentful_paint", "Main content loads", 2500, 4000, "ms"],
+  ["interaction_to_next_paint", "Response to taps and clicks", 200, 500, "ms"],
+  ["cumulative_layout_shift", "Layout shifting", 0.1, 0.25, ""],
+  ["first_contentful_paint", "First content appears", 1800, 3000, "ms"],
+] as const;
+
+async function cruxSpeed(u: URL, strategy: Strategy, timeoutMs: number): Promise<AuditResult["metrics"] | null> {
+  if (!process.env.PAGESPEED_API_KEY || timeoutMs < 2000) return null;
+  const body = { origin: u.origin, formFactor: strategy === "mobile" ? "PHONE" : "DESKTOP", metrics: FIELD.map((f) => f[0]) };
+  const res = await fetch(`https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${encodeURIComponent(process.env.PAGESPEED_API_KEY)}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(Math.min(timeoutMs, 10_000)),
+  }).catch(() => null);
+  if (!res || !res.ok) return null; // 404 = not enough real-visitor data for this site
+  const data = (await res.json().catch(() => ({}))) as { record?: { metrics?: Record<string, { percentiles?: { p75?: number | string } }> } };
+  const metrics: AuditResult["metrics"] = [];
+  for (const [key, label, good, poor, unit] of FIELD) {
+    const raw = data.record?.metrics?.[key]?.percentiles?.p75;
+    if (raw === undefined) continue;
+    const v = Number(raw);
+    metrics.push({
+      label: `${label} (real ${strategy} visitors)`,
+      value: unit === "ms" ? (v >= 1000 ? `${(v / 1000).toFixed(1)} s` : `${Math.round(v)} ms`) : v.toFixed(2),
+      status: v <= good ? "pass" : v <= poor ? "warn" : "fail",
+    });
+  }
+  return metrics.length ? metrics : null;
+}
+
+// Google's Lighthouse test can take well over a minute on heavy sites. Vercel allows up to 300s per request
+// (Hobby, Fluid compute), so give it most of that, with one retry after a quick failure.
+const SPEED_BUDGET_MS = 270_000;
+
+/** One speed test (mobile or desktop). Runs as its own request so each gets the full time limit. */
 export async function runSpeed(input: string, strategy: Strategy): Promise<SpeedResult> {
   const u = normalizeUrl(input);
   await assertPublic(u);
   const started = Date.now();
-  let out = await psi(u.toString(), strategy, 55_000);
-  // A quick failure (not a timeout) is often temporary on Google's side: try once more if there's time.
-  if ("error" in out && Date.now() - started < 20_000 && !/took too long/.test(out.error)) out = await psi(u.toString(), strategy, 55_000 - (Date.now() - started));
+  const left = () => SPEED_BUDGET_MS - (Date.now() - started);
+  let out = await psi(u.toString(), strategy, 150_000);
+  // A quick failure (not a timeout) is often temporary on Google's side: try once more while there's time.
+  if ("error" in out && left() > 90_000 && !/took too long/.test(out.error)) out = await psi(u.toString(), strategy, left() - 15_000);
   const base = { strategy, url: u.toString(), fetchedAt: new Date().toISOString() };
-  if ("error" in out) return { ...base, scores: null, metrics: [], issues: [], error: out.error };
-  const { metrics, issues } = strategy === "mobile" ? lighthouseSummary(out.lh) : { metrics: [], issues: [] };
-  return { ...base, scores: scoresOf(out.lh), metrics, issues, error: null };
+  if (!("error" in out)) {
+    const { metrics, issues } = strategy === "mobile" ? lighthouseSummary(out.lh) : { metrics: [], issues: [] };
+    return { ...base, source: "lab", scores: scoresOf(out.lh), metrics, issues, error: null };
+  }
+  const field = await cruxSpeed(u, strategy, left());
+  if (field) return { ...base, source: "field", scores: null, metrics: field, issues: [], error: null };
+  return { ...base, source: "lab", scores: null, metrics: [], issues: [], error: out.error };
 }
 
 /** Combines the page checks with the mobile/desktop speed runs into one report. */
 export function mergeAudit(base: AuditResult, mobile: SpeedResult | null, desktop: SpeedResult | null): AuditResult {
   const notes = [...base.notes];
-  if (!mobile?.scores) notes.unshift("Google's mobile speed test didn't finish for this site, so mobile speed scores aren't included.");
+  if (mobile?.source === "field" || desktop?.source === "field") notes.unshift("Google's lab test couldn't run on this site, so speed numbers come from real Chrome visitors over the last 28 days (75th percentile).");
+  else if (!mobile?.scores) notes.unshift("Google's mobile speed test didn't finish for this site, so mobile speed scores aren't included.");
   return {
     ...base, mobile: mobile?.scores ?? null, desktop: desktop?.scores ?? null,
-    metrics: mobile?.metrics ?? [], lighthouseIssues: mobile?.issues ?? [], notes,
+    // Mobile measurements (lab or real-visitor); desktop real-visitor numbers only if mobile has none.
+    metrics: mobile?.metrics.length ? mobile.metrics : desktop?.source === "field" ? desktop.metrics : [],
+    lighthouseIssues: mobile?.issues ?? [], notes,
   };
 }
 

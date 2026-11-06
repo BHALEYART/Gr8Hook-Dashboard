@@ -4,7 +4,8 @@ import { clientIp, cors, allowOrigin, rateLimited } from "@/lib/public-api";
 import { runAudit, runSpeed, type AuditResult, type SpeedResult } from "@/lib/site-audit";
 
 // Public endpoint for the free audit on gr8hook.com/audit. Only gr8hook.com (and local previews) may call it.
-export const maxDuration = 60;
+// Google's speed test can take over a minute on heavy sites. 300s is the Hobby maximum with Fluid compute.
+export const maxDuration = 300;
 
 // Recent results are reused for 15 minutes (per instance) so repeat checks don't re-run Google's test.
 // The page checks and each Google speed test (mobile, desktop) are separate requests, so each gets the full time limit.

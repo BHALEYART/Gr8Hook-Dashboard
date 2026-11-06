@@ -98,7 +98,7 @@ Admins (client settings → **Ad account connections**) and client owners (accou
 
 `POST /api/site-audit` powers the free audit at gr8hook.com/audit. It runs Google PageSpeed Insights (mobile and desktop) and checks the page's public HTML: title, description, H1, viewport, social preview, structured data, sitemap, click-to-call, booking links, lead forms, Google tag and Meta Pixel.
 
-- Set `PAGESPEED_API_KEY` in Vercel (a Google Cloud API key restricted to the PageSpeed Insights API).
+- Set `PAGESPEED_API_KEY` in Vercel (a Google Cloud API key restricted to the **PageSpeed Insights API** and the **Chrome UX Report API**). Speed requests may run up to 300s (Hobby maximum with Fluid compute). When Google's lab test can't run on a site, real-visitor speed from the Chrome UX Report is shown instead, if the site has enough traffic.
 - Only gr8hook.com may call it (CORS), private/internal addresses are refused, and each instance allows 8 audits per IP per hour with a 15-minute cache.
 - `POST /api/audit-lead` handles "Get my full report": it saves the lead to `audit_leads` (needs Supabase), emails the owner a branded report with recommendations (needs `RESEND_API_KEY`), scores the lead and emails you an alert for hot leads (every lead if the database isn't set up, or with `AUDIT_NOTIFY_ALL=true`).
 - If neither the database nor email is set up, the audit page falls back to FormSubmit so no lead is lost.
